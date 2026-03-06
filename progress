@@ -1,0 +1,158 @@
+﻿PatriotContracts - Progress Snapshot
+Last updated: 2026-03-06
+
+Implemented
+1. Project scaffolding and architecture
+- Created full plain PHP + MySQL structure for XAMPP/cPanel portability.
+- Added required folders: admin, api, assets, includes, ingest, logs, modules, sql, templates.
+- Added core public pages, admin pages, API endpoints, config files, and README/install docs.
+
+2. Database schema and seeds
+- Built schema with all requested tables:
+  - Core: sources, agencies, vendors, contracts_raw, contracts_clean, contract_categories, contract_category_map, contract_updates, stats_daily, ingest_logs.
+  - Users/monetization: users, subscription_plans, subscriptions, api_keys, api_usage, saved_searches, alerts.
+  - Future placeholders: contract_scores, contract_similarities, contract_renewals, vendor_metrics, agency_metrics.
+- Seeded sources, initial categories, subscription plans.
+- Later extended categories with additional slugs (see Categories section below).
+
+3. Data source integration (no AI/ML)
+- USAspending ingest script implemented and expanded to support multi-page pulls.
+- SAM opportunities and SAM awards ingest scripts implemented with API key support placeholders.
+- Raw payload-first ingestion pattern implemented into contracts_raw.
+
+4. Normalization, categorization, dedupe
+- Added normalize rules (agency/vendor/date/value/status) in includes/normalize.php.
+- Added rule-based categorization in includes/categorize.php.
+- Added dedupe marking logic in includes/dedupe.php (no deletions).
+- Fixed dedupe SQL bind bug (duplicate named placeholders issue).
+
+5. Ingestion pipeline scripts
+- ingest/ingest_usaspending.php
+- ingest/ingest_sam_opportunities.php
+- ingest/ingest_sam_awards.php
+- ingest/normalize_contracts.php
+- ingest/calculate_stats.php
+- ingest/run_alerts.php
+- Added ingest/recategorize_contracts.php for category backfill/recalculation.
+
+6. Website/API/admin
+- Public pages implemented: home, search, contract details, category/agency/vendor pages, stats.
+- API endpoints implemented: /api/contracts.php, /api/agencies.php, /api/vendors.php, /api/stats.php.
+- Admin pages implemented: /admin/index.php, /admin/run_ingest.php, /admin/logs.php.
+- Added /admin/recategorize.php endpoint and admin button.
+
+7. Listing UX/content improvements
+- Added dynamic page titles.
+- Increased listing volume:
+  - Homepage latest contracts: 25
+  - Search results per page: 50
+- Enriched listing summaries with more context:
+  - contract number, amount, posted/award/due dates, status,
+  - NAICS, PSC, POC, office, place of performance when available.
+
+8. Deployment docs
+- Added INSTALLATION_GUIDE.md with detailed XAMPP and cPanel steps.
+- Linked guide from README.
+
+Categories currently supported
+Base:
+- defense
+- construction
+- it-cybersecurity
+- logistics
+- healthcare
+- professional-services
+- uncategorized
+
+Added:
+- manufacturing
+- research-and-development
+- facilities-maintenance
+- security-and-law-enforcement
+- aerospace-and-aviation
+- energy-and-environment
+- education-and-training
+- telecom
+- professional-scientific-technical
+- grants-assistance
+
+Current data status (local)
+- contracts_raw: 2500
+- contracts_clean: 2500
+- visible (non-duplicate): 2309
+- unprocessed raw: 0
+
+Key notes
+1. Local SSL/TLS workaround
+- Due to local certificate chain interception, ingestion required SSL bypass in config:
+  - config.php -> ingest.ssl.verify_ssl = false
+- This is for local development only.
+- Must set verify_ssl = true before production/cPanel.
+
+2. php.ini changes applied for CA bundle
+- Active XAMPP php.ini updated with:
+  - curl.cainfo = "C:\xampp\apache\bin\curl-ca-bundle.crt"
+  - openssl.cafile = "C:\xampp\apache\bin\curl-ca-bundle.crt"
+- Backup created: C:\xampp\php\php.ini.codex.bak
+
+3. Ingestion throughput behavior
+- USAspending ingest now supports max_pages_per_run and days_back from config.
+- normalize_contracts.php processes batches (1000 per run); multiple runs may be needed after large ingests.
+
+4. Security posture
+- Uses PDO prepared statements.
+- Uses password_hash/password_verify.
+- Escaping helper used for output.
+- Admin routes require user role = admin.
+
+TODOs (prioritized)
+High priority
+1. Reduce uncategorized volume
+- Add broader NAICS + PSC mapping tables and additional keyword patterns.
+- Add explicit fallback subcategories (e.g., supplies/equipment/services).
+
+2. Wire recategorization into regular operations
+- Add recategorization call into admin/run_ingest.php (after normalization).
+- Optional: add cron job schedule for periodic recategorization.
+
+3. Add search pagination controls UI
+- Backend supports pages, but visible next/prev controls should be added to search.php.
+
+4. Add robust API key enforcement
+- Enforce api_keys and api_usage checks on API endpoints.
+- Apply tier daily limits.
+
+Medium priority
+5. Improve SAM ingestion field mappings
+- Align exact response keys with live SAM payloads.
+- Expand contact and place-of-performance extraction consistency.
+
+6. Add ingest health dashboard
+- Show last successful run per source, error rates, and backlog counts.
+
+7. Improve stats granularity
+- Add rolling 7/30 day metrics and trend tables/charts.
+
+8. Add export feature
+- CSV export for filtered search results and API-based exports.
+
+Low priority
+9. Add category tuning interface in admin
+- Allow rule edits without touching PHP files.
+
+10. Harden production deployment checklist
+- Add .htaccess rules, optional admin IP restriction, and stricter error handling defaults.
+
+Operational run order
+1. ingest_usaspending.php (and SAM scripts if keys configured)
+2. normalize_contracts.php (repeat until unprocessed raw = 0)
+3. recategorize_contracts.php (when category rules change)
+4. calculate_stats.php
+5. run_alerts.php
+
+Quick commands (local)
+- C:\xampp\php\php.exe C:\xampp\htdocs\patriotcontracts\ingest\ingest_usaspending.php
+- C:\xampp\php\php.exe C:\xampp\htdocs\patriotcontracts\ingest\normalize_contracts.php
+- C:\xampp\php\php.exe C:\xampp\htdocs\patriotcontracts\ingest\recategorize_contracts.php
+- C:\xampp\php\php.exe C:\xampp\htdocs\patriotcontracts\ingest\calculate_stats.php
+

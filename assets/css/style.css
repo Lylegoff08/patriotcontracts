@@ -1,0 +1,74 @@
+﻿:root {
+  --bg: #f5f7fb;
+  --text: #1f2937;
+  --muted: #6b7280;
+  --primary: #0f4c81;
+  --card: #ffffff;
+  --border: #d1d5db;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  background: linear-gradient(160deg, #f9fbff 0%, #eef3fa 100%);
+  color: var(--text);
+}
+
+.container { width: min(1100px, 92vw); margin: 0 auto; }
+.row { display: flex; justify-content: space-between; align-items: center; }
+.site-header, .site-footer { background: #fff; border-bottom: 1px solid var(--border); }
+.site-footer { border-top: 1px solid var(--border); border-bottom: 0; margin-top: 2rem; padding: 1rem 0; }
+.brand { font-weight: 700; color: var(--primary); text-decoration: none; }
+nav a { margin-left: 1rem; color: var(--text); text-decoration: none; }
+
+.hero { padding: 2rem 0 1rem; }
+.search-form { display: flex; gap: 0.5rem; }
+input, select, button {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.btn {
+  display: inline-block;
+  background: var(--primary);
+  color: #fff;
+  border: 0;
+  padding: 0.6rem 0.9rem;
+  text-decoration: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.btn-secondary {
+  background: #4b5563;
+  color: #fff;
+}
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+.table { width: 100%; border-collapse: collapse; }
+.table th, .table td { border-bottom: 1px solid var(--border); padding: 0.45rem; text-align: left; }
+.muted { color: var(--muted); font-size: 0.92rem; }
+.warn { color: #b91c1c; }
+.filter-grid { display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)); gap: 0.7rem; }
+.form { display: grid; gap: 0.6rem; }
+.listing-item { margin-bottom: 0.85rem; }
+.listing-meta { margin: 0.25rem 0; }
+.listing-desc { margin: 0.35rem 0 0.55rem; color: #374151; line-height: 1.35; }
+.pager { display: flex; gap: 0.5rem; margin-top: 1rem; }
+.compact-pipeline { padding: 0.7rem; }
+.compact-pipeline h2 { margin: 0 0 0.45rem; font-size: 1rem; }
+.compact-pipeline p { margin: 0.25rem 0; font-size: 0.9rem; line-height: 1.2; }
+
+@media (max-width: 900px) {
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .filter-grid { grid-template-columns: 1fr; }
+  nav a { margin-left: 0.5rem; font-size: 0.95rem; }
+}

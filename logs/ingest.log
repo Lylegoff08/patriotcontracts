@@ -1,0 +1,15 @@
+[2026-03-05 21:17:24] ingest_usaspending.php ERROR fetched=0 processed=0 HTTP error: SSL certificate problem: self signed certificate in certificate chain
+[2026-03-05 21:18:25] ingest_usaspending.php SUCCESS fetched=100 processed=100 HTTP 200 received, rows=100
+[2026-03-05 21:18:25] calculate_stats.php SUCCESS fetched=2 processed=2 Daily stats recalculated
+[2026-03-05 21:18:46] calculate_stats.php SUCCESS fetched=2 processed=2 Daily stats recalculated
+[2026-03-05 21:19:12] normalize_contracts.php SUCCESS fetched=100 processed=100 Normalized records
+[2026-03-05 21:19:13] calculate_stats.php SUCCESS fetched=2 processed=7 Daily stats recalculated
+[2026-03-05 21:23:27] ingest_usaspending.php SUCCESS fetched=2500 processed=2500 Fetched rows=2500 across up to 25 pages
+[2026-03-05 21:23:45] ingest_usaspending.php SUCCESS fetched=2500 processed=2500 Fetched rows=2500 across up to 25 pages
+[2026-03-05 21:23:52] normalize_contracts.php SUCCESS fetched=1000 processed=1000 Normalized records
+[2026-03-05 21:23:52] calculate_stats.php SUCCESS fetched=2 processed=9 Daily stats recalculated
+[2026-03-05 21:24:09] normalize_contracts.php SUCCESS fetched=1000 processed=1000 Normalized records
+[2026-03-05 21:24:12] normalize_contracts.php SUCCESS fetched=500 processed=500 Normalized records
+[2026-03-05 21:24:12] calculate_stats.php SUCCESS fetched=2 processed=9 Daily stats recalculated
+[2026-03-05 21:31:33] recategorize_contracts.php SUCCESS fetched=2500 processed=2500 Recategorized contracts
+[2026-03-05 21:31:33] calculate_stats.php SUCCESS fetched=2 processed=16 Daily stats recalculated
