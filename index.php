@@ -15,6 +15,14 @@ $openCount = (int) $pdo->query('SELECT COUNT(*) FROM contracts_clean WHERE is_du
 $signalCount = (int) $pdo->query('SELECT COUNT(*) FROM contracts_clean WHERE is_duplicate = 0 AND is_upcoming_signal = 1')->fetchColumn();
 $dueSoonCount = (int) $pdo->query('SELECT COUNT(*) FROM contracts_clean WHERE is_duplicate = 0 AND deadline_soon = 1')->fetchColumn();
 $awardCount = (int) $pdo->query('SELECT COUNT(*) FROM contracts_clean WHERE is_duplicate = 0 AND is_awarded = 1')->fetchColumn();
+$archiveCount = (int) $pdo->query("SELECT COUNT(*) FROM contracts_clean
+    WHERE is_duplicate = 0
+      AND (
+        (response_deadline IS NOT NULL AND response_deadline < CURDATE())
+        OR (end_date IS NOT NULL AND end_date < CURDATE())
+        OR status IN ('closed', 'archived', 'expired', 'cancelled')
+        OR is_awarded = 1
+      )")->fetchColumn();
 
 $topCategories = $pdo->query('SELECT cat.slug, cat.name, COUNT(*) AS total
     FROM contracts_clean cc JOIN contract_categories cat ON cat.id = cc.category_id
@@ -44,6 +52,7 @@ include __DIR__ . '/templates/header.php';
     <p><a href="early-signals.php">Early Signals</a>: <?php echo number_format($signalCount); ?></p>
     <p><a href="deadline-soon.php">Deadline Soon</a>: <?php echo number_format($dueSoonCount); ?></p>
     <p><a href="recent-awards.php">Recent Awards</a>: <?php echo number_format($awardCount); ?></p>
+    <p><a href="archive.php">Archive</a>: <?php echo number_format($archiveCount); ?></p>
   </div>
 </section>
 
@@ -53,8 +62,8 @@ include __DIR__ . '/templates/header.php';
     <?php foreach ($latest as $row): ?>
       <article class="listing-item">
         <a href="contract.php?id=<?php echo (int) $row['id']; ?>"><?php echo e($row['title']); ?></a>
-        <div class="muted listing-meta"><?php echo e((string) $row['agency_name']); ?> | <?php echo e((string) $row['vendor_name']); ?> | <?php echo e((string) $row['category_name']); ?> | $<?php echo number_format((float) $row['award_amount'], 2); ?></div>
-        <div class="muted listing-meta">Posted: <?php echo e((string) $row['posted_date']); ?> | Award: <?php echo e((string) $row['award_date']); ?> | Due: <?php echo e((string) $row['response_deadline']); ?> | Status: <?php echo e((string) $row['status']); ?></div>
+        <div class="muted listing-meta"><?php echo e(display_text($row['agency_name'] ?? null)); ?> | <?php echo e(display_text($row['vendor_name'] ?? null)); ?> | <?php echo e(display_text($row['category_name'] ?? null)); ?> | <?php echo e(display_contract_value($row)); ?></div>
+        <div class="muted listing-meta">Posted: <?php echo e(display_date($row['posted_date'] ?? null)); ?> | Award: <?php echo e(display_date($row['award_date'] ?? null)); ?> | Due: <?php echo e(display_date($row['response_deadline'] ?? null)); ?> | Status: <?php echo e(display_text($row['status'] ?? null)); ?></div>
         <p class="listing-desc"><?php echo e(contract_listing_description($row)); ?></p>
       </article>
     <?php endforeach; ?>
