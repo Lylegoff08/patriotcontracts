@@ -129,6 +129,12 @@ Notes:
 - Summary: Added new `archive.php` listing route for contracts considered over (past deadline, past end date, closed/archive status, or awarded), added homepage pipeline count/link, and added `archieve.php` alias route for typo-safe access.
 - Commit:
 
+- Date: 2026-03-06
+- Task: Award classification backfill safeguards in normalization
+- Files changed: `ingest/normalize_contracts.php`, `AI_TASKS.md`
+- Summary: Updated normalization to treat records as award rows only when `source_type IN ('usaspending','sam_award')` and `award_date IS NOT NULL`; for those rows, status now falls back to `awarded` when blank/unknown and `is_awarded` is forced to `1` during normalize backfill.
+- Commit:
+
 ---
 
 ## REVIEW NOTES

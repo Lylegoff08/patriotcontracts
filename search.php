@@ -26,11 +26,8 @@ if (!$canAdvancedSearch) {
 }
 [$where, $params] = contract_search_query_parts($filters);
 
-$countSql = 'SELECT COUNT(*) FROM contracts_clean cc
-    LEFT JOIN agencies a ON a.id = cc.agency_id
-    LEFT JOIN vendors v ON v.id = cc.vendor_id
-    LEFT JOIN contract_categories cat ON cat.id = cc.category_id
-    WHERE ' . implode(' AND ', $where);
+$countJoins = (($filters['category'] ?? '') !== '') ? ' LEFT JOIN contract_categories cat ON cat.id = cc.category_id' : '';
+$countSql = 'SELECT COUNT(*) FROM contracts_clean cc' . $countJoins . ' WHERE ' . implode(' AND ', $where);
 $countStmt = $pdo->prepare($countSql);
 foreach ($params as $k => $v) {
     $countStmt->bindValue(':' . $k, $v);
@@ -134,8 +131,8 @@ include __DIR__ . '/templates/header.php';
     <?php foreach ($rows as $row): ?>
       <article>
         <h3><a href="contract.php?id=<?php echo (int) $row['id']; ?>"><?php echo e($row['title']); ?></a></h3>
-        <p class="muted listing-meta"><?php echo e((string) $row['agency_name']); ?> | <?php echo e((string) $row['vendor_name']); ?> | <?php echo e((string) $row['category_name']); ?></p>
-        <p class="muted listing-meta">#<?php echo e((string) $row['contract_number']); ?> | $<?php echo number_format((float) $row['award_amount'], 2); ?> | Posted: <?php echo e((string) $row['posted_date']); ?> | Award: <?php echo e((string) $row['award_date']); ?> | Due: <?php echo e((string) $row['response_deadline']); ?> | <?php echo e((string) $row['status']); ?></p>
+        <p class="muted listing-meta"><?php echo e(display_text($row['agency_name'] ?? null)); ?> | <?php echo e(display_text($row['vendor_name'] ?? null)); ?> | <?php echo e(display_text($row['category_name'] ?? null)); ?></p>
+        <p class="muted listing-meta">#<?php echo e(display_text($row['contract_number'] ?? null)); ?> | <?php echo e(display_contract_value($row)); ?> | Posted: <?php echo e(display_date($row['posted_date'] ?? null)); ?> | Award: <?php echo e(display_date($row['award_date'] ?? null)); ?> | Due: <?php echo e(display_date($row['response_deadline'] ?? null)); ?> | <?php echo e(display_text($row['status'] ?? null)); ?></p>
         <p class="muted listing-meta">
           <?php if ((int) $row['is_biddable_now'] === 1): ?>Open Now | <?php endif; ?>
           <?php if ((int) $row['is_upcoming_signal'] === 1): ?>Early Signal | <?php endif; ?>

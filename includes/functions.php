@@ -161,6 +161,33 @@ function contract_listing_description(array $row): string
     return $summary;
 }
 
+function display_text(?string $value, string $fallback = 'N/A'): string
+{
+    $value = trim((string) $value);
+    return $value === '' ? $fallback : $value;
+}
+
+function display_date(?string $value, string $fallback = 'N/A'): string
+{
+    return display_text($value, $fallback);
+}
+
+function display_contract_value(array $row, string $fallback = 'N/A'): string
+{
+    $award = $row['award_amount'] ?? null;
+    if ($award !== null && $award !== '' && is_numeric($award)) {
+        return '$' . number_format((float) $award, 2);
+    }
+
+    $min = $row['value_min'] ?? null;
+    $max = $row['value_max'] ?? null;
+    if ($min !== null && $min !== '' && $max !== null && $max !== '' && is_numeric($min) && is_numeric($max)) {
+        return '$' . number_format((float) $min, 2) . ' - $' . number_format((float) $max, 2);
+    }
+
+    return $fallback;
+}
+
 function int_bool($value): int
 {
     return (int) (!empty($value));

@@ -1,4 +1,13 @@
-﻿CREATE DATABASE IF NOT EXISTS patriotcontracts CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+﻿-- PatriotContracts consolidated installer
+-- Generated from schema + migrations
+-- Order: schema -> actionability -> membership_auth -> search_ingest_hardening
+-- Idempotency relies on IF NOT EXISTS / ON DUPLICATE KEY UPDATE patterns in source files.
+
+USE patriotcontracts;
+
+-- ===== BEGIN sql/schema.sql =====
+
+CREATE DATABASE IF NOT EXISTS patriotcontracts CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE patriotcontracts;
 
 CREATE TABLE IF NOT EXISTS sources (
@@ -588,3 +597,283 @@ WHERE cc.source_type IN ('usaspending','sam_award')
     OR cc.status = 'unknown'
     OR cc.is_awarded = 0
   );
+
+
+-- ===== END sql/schema.sql =====
+
+-- ===== BEGIN sql/migration_2026_03_actionability.sql =====
+
+USE patriotcontracts;
+
+ALTER TABLE contracts_clean
+  ADD COLUMN IF NOT EXISTS source_name VARCHAR(120) NULL AFTER source_type,
+  ADD COLUMN IF NOT EXISTS notice_type VARCHAR(80) NULL AFTER psc_code,
+  ADD COLUMN IF NOT EXISTS set_aside_code VARCHAR(80) NULL AFTER notice_type,
+  ADD COLUMN IF NOT EXISTS set_aside_label VARCHAR(255) NULL AFTER set_aside_code,
+  ADD COLUMN IF NOT EXISTS value_min DECIMAL(18,2) NULL AFTER award_amount,
+  ADD COLUMN IF NOT EXISTS value_max DECIMAL(18,2) NULL AFTER value_min,
+  ADD COLUMN IF NOT EXISTS place_state VARCHAR(80) NULL AFTER place_of_performance,
+  ADD COLUMN IF NOT EXISTS is_biddable_now TINYINT(1) NOT NULL DEFAULT 0 AFTER category_id,
+  ADD COLUMN IF NOT EXISTS is_upcoming_signal TINYINT(1) NOT NULL DEFAULT 0 AFTER is_biddable_now,
+  ADD COLUMN IF NOT EXISTS is_awarded TINYINT(1) NOT NULL DEFAULT 0 AFTER is_upcoming_signal,
+  ADD COLUMN IF NOT EXISTS deadline_soon TINYINT(1) NOT NULL DEFAULT 0 AFTER is_awarded,
+  ADD COLUMN IF NOT EXISTS has_contact_info TINYINT(1) NOT NULL DEFAULT 0 AFTER deadline_soon,
+  ADD COLUMN IF NOT EXISTS has_value_estimate TINYINT(1) NOT NULL DEFAULT 0 AFTER has_contact_info;
+
+ALTER TABLE contracts_clean
+  ADD INDEX IF NOT EXISTS idx_clean_actionability (is_biddable_now, is_upcoming_signal, is_awarded, deadline_soon),
+  ADD INDEX IF NOT EXISTS idx_clean_set_aside (set_aside_code),
+  ADD INDEX IF NOT EXISTS idx_clean_place_state (place_state);
+
+CREATE TABLE IF NOT EXISTS naics_category_map (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  naics_prefix VARCHAR(10) NOT NULL UNIQUE,
+  category_id INT NOT NULL,
+  notes VARCHAR(255) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_naics_category FOREIGN KEY (category_id) REFERENCES contract_categories(id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS psc_category_map (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  psc_prefix VARCHAR(10) NOT NULL UNIQUE,
+  category_id INT NOT NULL,
+  notes VARCHAR(255) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_psc_category FOREIGN KEY (category_id) REFERENCES contract_categories(id)
+) ENGINE=InnoDB;
+
+INSERT INTO sources (name, slug, base_url, auth_type, notes)
+VALUES
+('SAM Contract Awards API', 'sam_awards', 'https://api.sam.gov/contract-awards/v1', 'api_key', 'SAM contract awards API via OpenGSA'),
+('Grants.gov Opportunities API', 'grants', 'https://api.grants.gov/v1/api', 'none', 'Federal assistance opportunities (kept separate from contract flow)')
+ON DUPLICATE KEY UPDATE name=VALUES(name), base_url=VALUES(base_url), auth_type=VALUES(auth_type), notes=VALUES(notes);
+
+INSERT INTO contract_categories (slug, name, description)
+VALUES
+('supplies-equipment', 'Supplies and Equipment', 'General commodity procurement, supplies, and equipment purchases'),
+('field-services', 'Field Services', 'On-site service delivery and operational support services'),
+('repair-maintenance', 'Repair and Maintenance', 'Repair, overhaul, sustainment, and maintenance support'),
+('administrative-support', 'Administrative Support', 'Clerical, back-office, records, and program administration support')
+ON DUPLICATE KEY UPDATE name=VALUES(name), description=VALUES(description);
+
+INSERT INTO naics_category_map (naics_prefix, category_id, notes)
+SELECT '23', id, 'Construction NAICS family' FROM contract_categories WHERE slug = 'construction'
+ON DUPLICATE KEY UPDATE category_id=VALUES(category_id), notes=VALUES(notes);
+INSERT INTO naics_category_map (naics_prefix, category_id, notes)
+SELECT '238', id, 'Specialty trade contractors' FROM contract_categories WHERE slug = 'repair-maintenance'
+ON DUPLICATE KEY UPDATE category_id=VALUES(category_id), notes=VALUES(notes);
+INSERT INTO naics_category_map (naics_prefix, category_id, notes)
+SELECT '42', id, 'Wholesale trade / supplies' FROM contract_categories WHERE slug = 'supplies-equipment'
+ON DUPLICATE KEY UPDATE category_id=VALUES(category_id), notes=VALUES(notes);
+INSERT INTO naics_category_map (naics_prefix, category_id, notes)
+SELECT '5415', id, 'IT services' FROM contract_categories WHERE slug = 'it-cybersecurity'
+ON DUPLICATE KEY UPDATE category_id=VALUES(category_id), notes=VALUES(notes);
+INSERT INTO naics_category_map (naics_prefix, category_id, notes)
+SELECT '5417', id, 'R&D services' FROM contract_categories WHERE slug = 'research-and-development'
+ON DUPLICATE KEY UPDATE category_id=VALUES(category_id), notes=VALUES(notes);
+INSERT INTO naics_category_map (naics_prefix, category_id, notes)
+SELECT '5612', id, 'Facilities support services' FROM contract_categories WHERE slug = 'facilities-maintenance'
+ON DUPLICATE KEY UPDATE category_id=VALUES(category_id), notes=VALUES(notes);
+INSERT INTO naics_category_map (naics_prefix, category_id, notes)
+SELECT '62', id, 'Healthcare and social assistance' FROM contract_categories WHERE slug = 'healthcare'
+ON DUPLICATE KEY UPDATE category_id=VALUES(category_id), notes=VALUES(notes);
+
+INSERT INTO psc_category_map (psc_prefix, category_id, notes)
+SELECT 'D3', id, 'IT and telecom support' FROM contract_categories WHERE slug = 'it-cybersecurity'
+ON DUPLICATE KEY UPDATE category_id=VALUES(category_id), notes=VALUES(notes);
+INSERT INTO psc_category_map (psc_prefix, category_id, notes)
+SELECT 'Q', id, 'Medical services/supplies PSC family' FROM contract_categories WHERE slug = 'healthcare'
+ON DUPLICATE KEY UPDATE category_id=VALUES(category_id), notes=VALUES(notes);
+INSERT INTO psc_category_map (psc_prefix, category_id, notes)
+SELECT 'R', id, 'Professional support services' FROM contract_categories WHERE slug = 'professional-services'
+ON DUPLICATE KEY UPDATE category_id=VALUES(category_id), notes=VALUES(notes);
+INSERT INTO psc_category_map (psc_prefix, category_id, notes)
+SELECT 'S', id, 'Housekeeping/maintenance and field services' FROM contract_categories WHERE slug = 'field-services'
+ON DUPLICATE KEY UPDATE category_id=VALUES(category_id), notes=VALUES(notes);
+INSERT INTO psc_category_map (psc_prefix, category_id, notes)
+SELECT 'J', id, 'Maintenance, repair, and rebuild' FROM contract_categories WHERE slug = 'repair-maintenance'
+ON DUPLICATE KEY UPDATE category_id=VALUES(category_id), notes=VALUES(notes);
+INSERT INTO psc_category_map (psc_prefix, category_id, notes)
+SELECT 'Y', id, 'Construction of structures and facilities' FROM contract_categories WHERE slug = 'construction'
+ON DUPLICATE KEY UPDATE category_id=VALUES(category_id), notes=VALUES(notes);
+
+
+-- ===== END sql/migration_2026_03_actionability.sql =====
+
+-- ===== BEGIN sql/migration_2026_03_membership_auth.sql =====
+
+USE patriotcontracts;
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS provider VARCHAR(30) NOT NULL DEFAULT 'email' AFTER full_name,
+  ADD COLUMN IF NOT EXISTS provider_id VARCHAR(191) NULL AFTER provider,
+  ADD COLUMN IF NOT EXISTS email_verified TINYINT(1) NOT NULL DEFAULT 0 AFTER provider_id,
+  ADD COLUMN IF NOT EXISTS account_status VARCHAR(40) NOT NULL DEFAULT 'pending_payment' AFTER email_verified,
+  ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(120) NULL AFTER role,
+  ADD COLUMN IF NOT EXISTS last_login_at DATETIME NULL AFTER updated_at;
+
+ALTER TABLE users
+  ADD UNIQUE KEY IF NOT EXISTS uq_users_provider (provider, provider_id),
+  ADD KEY IF NOT EXISTS idx_users_status (account_status),
+  ADD KEY IF NOT EXISTS idx_users_verified (email_verified),
+  ADD KEY IF NOT EXISTS idx_users_stripe_customer (stripe_customer_id);
+
+UPDATE users
+SET provider = 'email'
+WHERE provider IS NULL OR provider = '';
+
+UPDATE users
+SET email_verified = CASE WHEN is_active = 1 THEN 1 ELSE 0 END
+WHERE email_verified IS NULL OR email_verified = 0;
+
+UPDATE users
+SET account_status = CASE WHEN is_active = 1 THEN 'active' ELSE 'suspended' END
+WHERE account_status IS NULL OR account_status = '';
+
+CREATE TABLE IF NOT EXISTS email_verifications (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT NOT NULL,
+  token_hash CHAR(64) NOT NULL,
+  expires_at DATETIME NOT NULL,
+  used_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_email_verifications_token (token_hash),
+  KEY idx_email_verifications_user (user_id),
+  KEY idx_email_verifications_exp (expires_at),
+  CONSTRAINT fk_email_verifications_user FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS password_resets (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT NOT NULL,
+  token_hash CHAR(64) NOT NULL,
+  expires_at DATETIME NOT NULL,
+  used_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_password_resets_token (token_hash),
+  KEY idx_password_resets_user (user_id),
+  KEY idx_password_resets_exp (expires_at),
+  CONSTRAINT fk_password_resets_user FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS login_attempts (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  email VARCHAR(255) NULL,
+  ip_address VARCHAR(64) NOT NULL,
+  was_success TINYINT(1) NOT NULL DEFAULT 0,
+  attempted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_login_attempts_email_time (email, attempted_at),
+  KEY idx_login_attempts_ip_time (ip_address, attempted_at)
+) ENGINE=InnoDB;
+
+ALTER TABLE subscription_plans
+  ADD COLUMN IF NOT EXISTS name VARCHAR(120) NULL AFTER plan_code,
+  ADD COLUMN IF NOT EXISTS stripe_price_id VARCHAR(120) NULL AFTER price_monthly,
+  ADD COLUMN IF NOT EXISTS feature_flags_json TEXT NULL AFTER stripe_price_id,
+  ADD COLUMN IF NOT EXISTS api_daily_limit INT NULL AFTER feature_flags_json;
+
+ALTER TABLE subscription_plans
+  MODIFY COLUMN plan_code VARCHAR(80) NOT NULL,
+  MODIFY COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1,
+  ADD UNIQUE KEY IF NOT EXISTS uq_subscription_plan_code (plan_code);
+
+UPDATE subscription_plans
+SET name = COALESCE(NULLIF(name, ''), plan_name)
+WHERE name IS NULL OR name = '';
+
+UPDATE subscription_plans
+SET feature_flags_json = COALESCE(feature_flags_json, feature_json)
+WHERE feature_flags_json IS NULL;
+
+UPDATE subscription_plans
+SET api_daily_limit = request_limit_daily
+WHERE api_daily_limit IS NULL AND request_limit_daily IS NOT NULL;
+
+ALTER TABLE subscriptions
+  ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(120) NULL AFTER plan_id,
+  ADD COLUMN IF NOT EXISTS stripe_subscription_id VARCHAR(120) NULL AFTER stripe_customer_id,
+  ADD COLUMN IF NOT EXISTS stripe_checkout_session_id VARCHAR(120) NULL AFTER stripe_subscription_id,
+  ADD COLUMN IF NOT EXISTS current_period_end DATETIME NULL AFTER status,
+  ADD COLUMN IF NOT EXISTS updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at;
+
+ALTER TABLE subscriptions
+  ADD KEY IF NOT EXISTS idx_subscriptions_stripe_subscription (stripe_subscription_id),
+  ADD KEY IF NOT EXISTS idx_subscriptions_stripe_customer (stripe_customer_id),
+  ADD KEY IF NOT EXISTS idx_subscriptions_checkout (stripe_checkout_session_id);
+
+UPDATE subscriptions
+SET current_period_end = ends_at
+WHERE current_period_end IS NULL AND ends_at IS NOT NULL;
+
+ALTER TABLE api_keys
+  ADD COLUMN IF NOT EXISTS api_key_hash CHAR(64) NULL AFTER user_id,
+  ADD COLUMN IF NOT EXISTS api_key_prefix VARCHAR(16) NULL AFTER api_key_hash,
+  ADD COLUMN IF NOT EXISTS status VARCHAR(30) NOT NULL DEFAULT 'active' AFTER label;
+
+ALTER TABLE api_keys
+  ADD KEY IF NOT EXISTS idx_api_keys_prefix (api_key_prefix),
+  ADD KEY IF NOT EXISTS idx_api_keys_status (status),
+  ADD KEY IF NOT EXISTS idx_api_keys_user_status (user_id, status),
+  ADD UNIQUE KEY IF NOT EXISTS uq_api_keys_hash (api_key_hash);
+
+UPDATE api_keys
+SET api_key_hash = SHA2(api_key, 256),
+    api_key_prefix = LEFT(api_key, 8)
+WHERE api_key_hash IS NULL AND api_key IS NOT NULL;
+
+ALTER TABLE api_usage
+  ADD COLUMN IF NOT EXISTS request_ip VARCHAR(64) NULL AFTER endpoint,
+  ADD COLUMN IF NOT EXISTS requested_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER request_ip;
+
+ALTER TABLE api_usage
+  ADD KEY IF NOT EXISTS idx_api_usage_key_time (api_key_id, requested_at),
+  ADD KEY IF NOT EXISTS idx_api_usage_endpoint_time (endpoint, requested_at);
+
+CREATE TABLE IF NOT EXISTS webhook_events (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  provider VARCHAR(40) NOT NULL,
+  event_id VARCHAR(191) NOT NULL,
+  event_type VARCHAR(120) NOT NULL,
+  payload_json LONGTEXT NOT NULL,
+  processed_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_webhook_provider_event (provider, event_id),
+  KEY idx_webhook_type (event_type),
+  KEY idx_webhook_created (created_at)
+) ENGINE=InnoDB;
+
+INSERT INTO subscription_plans (plan_code, name, plan_name, plan_type, price_monthly, stripe_price_id, feature_flags_json, api_daily_limit, request_limit_daily, feature_json, is_active)
+VALUES
+('MEMBER_BASIC', 'Member Basic', 'Member Basic', 'member', 29.00, '', '{"member_tools":true}', NULL, NULL, '{"member_tools":true}', 1),
+('MEMBER_PRO', 'Member Pro', 'Member Pro', 'member', 79.00, '', '{"member_tools":true,"advanced_search":true,"saved_searches":true,"alerts":true,"csv_export":true}', NULL, NULL, '{"member_tools":true,"advanced_search":true,"saved_searches":true,"alerts":true,"csv_export":true}', 1),
+('API_MEMBER', 'API Member', 'API Member', 'api', 199.00, '', '{"member_tools":true,"advanced_search":true,"saved_searches":true,"alerts":true,"csv_export":true,"api_access":true,"api_keys":true}', 50000, 50000, '{"member_tools":true,"advanced_search":true,"saved_searches":true,"alerts":true,"csv_export":true,"api_access":true,"api_keys":true}', 1)
+ON DUPLICATE KEY UPDATE
+  name = VALUES(name),
+  plan_name = VALUES(plan_name),
+  price_monthly = VALUES(price_monthly),
+  feature_flags_json = VALUES(feature_flags_json),
+  feature_json = VALUES(feature_json),
+  api_daily_limit = VALUES(api_daily_limit),
+  request_limit_daily = VALUES(request_limit_daily),
+  is_active = VALUES(is_active);
+
+
+-- ===== END sql/migration_2026_03_membership_auth.sql =====
+
+-- ===== BEGIN sql/migration_2026_03_search_ingest_hardening.sql =====
+
+USE patriotcontracts;
+
+ALTER TABLE contracts_clean
+  ADD INDEX IF NOT EXISTS idx_clean_duplicate_posted_id (is_duplicate, posted_date, id),
+  ADD INDEX IF NOT EXISTS idx_clean_duplicate_deadline_posted_id (is_duplicate, response_deadline, posted_date, id);
+
+ALTER TABLE contracts_raw
+  ADD INDEX IF NOT EXISTS idx_raw_source_source_record (source_id, source_record_id);
+
+
+-- ===== END sql/migration_2026_03_search_ingest_hardening.sql =====
+

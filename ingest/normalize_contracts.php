@@ -11,6 +11,8 @@ function normalize_contracts(PDO $pdo): array
     $startedAt = date('Y-m-d H:i:s');
     $fetched = 0;
     $processed = 0;
+    $warnings = 0;
+    $skipped = 0;
 
     $rows = $pdo->query('SELECT * FROM contracts_raw WHERE processed = 0 ORDER BY id ASC LIMIT 1000')->fetchAll();
     $fetched = count($rows);
@@ -33,17 +35,37 @@ function normalize_contracts(PDO $pdo): array
         :has_contact_info, :has_value_estimate, :is_duplicate, :duplicate_of, :dedupe_reason
     )
     ON DUPLICATE KEY UPDATE
-        title = VALUES(title),
-        description = VALUES(description),
-        source_name = VALUES(source_name),
-        notice_type = VALUES(notice_type),
-        set_aside_code = VALUES(set_aside_code),
-        set_aside_label = VALUES(set_aside_label),
-        value_min = VALUES(value_min),
-        value_max = VALUES(value_max),
-        status = VALUES(status),
-        place_state = VALUES(place_state),
-        category_id = VALUES(category_id),
+        source_record_id = COALESCE(NULLIF(VALUES(source_record_id), ""), source_record_id),
+        source_type = COALESCE(NULLIF(VALUES(source_type), ""), source_type),
+        contract_number = COALESCE(NULLIF(VALUES(contract_number), ""), contract_number),
+        title = COALESCE(NULLIF(VALUES(title), ""), title),
+        description = COALESCE(NULLIF(VALUES(description), ""), description),
+        source_name = COALESCE(NULLIF(VALUES(source_name), ""), source_name),
+        agency_id = COALESCE(VALUES(agency_id), agency_id),
+        vendor_id = COALESCE(VALUES(vendor_id), vendor_id),
+        naics_code = COALESCE(NULLIF(VALUES(naics_code), ""), naics_code),
+        psc_code = COALESCE(NULLIF(VALUES(psc_code), ""), psc_code),
+        notice_type = COALESCE(NULLIF(VALUES(notice_type), ""), notice_type),
+        set_aside_code = COALESCE(NULLIF(VALUES(set_aside_code), ""), set_aside_code),
+        set_aside_label = COALESCE(NULLIF(VALUES(set_aside_label), ""), set_aside_label),
+        award_amount = COALESCE(VALUES(award_amount), award_amount),
+        value_min = COALESCE(VALUES(value_min), value_min),
+        value_max = COALESCE(VALUES(value_max), value_max),
+        posted_date = COALESCE(VALUES(posted_date), posted_date),
+        award_date = COALESCE(VALUES(award_date), award_date),
+        response_deadline = COALESCE(VALUES(response_deadline), response_deadline),
+        start_date = COALESCE(VALUES(start_date), start_date),
+        end_date = COALESCE(VALUES(end_date), end_date),
+        status = COALESCE(NULLIF(VALUES(status), ""), status),
+        place_of_performance = COALESCE(NULLIF(VALUES(place_of_performance), ""), place_of_performance),
+        contact_name = COALESCE(NULLIF(VALUES(contact_name), ""), contact_name),
+        contact_email = COALESCE(NULLIF(VALUES(contact_email), ""), contact_email),
+        contact_phone = COALESCE(NULLIF(VALUES(contact_phone), ""), contact_phone),
+        contracting_office = COALESCE(NULLIF(VALUES(contracting_office), ""), contracting_office),
+        contact_address = COALESCE(NULLIF(VALUES(contact_address), ""), contact_address),
+        place_state = COALESCE(NULLIF(VALUES(place_state), ""), place_state),
+        source_url = COALESCE(NULLIF(VALUES(source_url), ""), source_url),
+        category_id = COALESCE(VALUES(category_id), category_id),
         is_biddable_now = VALUES(is_biddable_now),
         is_upcoming_signal = VALUES(is_upcoming_signal),
         is_awarded = VALUES(is_awarded),
@@ -58,166 +80,209 @@ function normalize_contracts(PDO $pdo): array
     $mark = $pdo->prepare('UPDATE contracts_raw SET processed = 1 WHERE id = :id');
 
     foreach ($rows as $raw) {
-        $payload = json_decode($raw['payload_json'], true);
-        if (!is_array($payload)) {
-            continue;
-        }
+        try {
+            $payload = json_decode($raw['payload_json'], true);
+            if (!is_array($payload)) {
+                $warnings++;
+                $skipped++;
+                $mark->execute(['id' => (int) $raw['id']]);
+                continue;
+            }
 
-        $sourceSlug = (int) $raw['source_id'];
-        $sourceType = 'unknown';
+            $sourceType = 'unknown';
 
-        $title = (string) ($payload['title'] ?? $payload['solicitationTitle'] ?? $payload['opportunityTitle'] ?? $payload['Award ID'] ?? $payload['awardId'] ?? 'Untitled');
-        $description = (string) ($payload['description'] ?? $payload['fullParentPathName'] ?? $payload['synopsis'] ?? $payload['Recipient Name'] ?? '');
-        $contractNumber = (string) ($payload['solicitationNumber'] ?? $payload['opportunityNumber'] ?? $payload['piid'] ?? $payload['Award ID'] ?? $payload['awardId'] ?? '');
-        $agencyName = (string) ($payload['department'] ?? $payload['fullParentPathName'] ?? $payload['Awarding Agency'] ?? $payload['agencyName'] ?? $payload['agency'] ?? 'Unknown Agency');
-        $vendorName = (string) ($payload['organizationName'] ?? $payload['awardeeName'] ?? $payload['Recipient Name'] ?? $payload['applicantType'] ?? 'Unknown Vendor');
+            $title = trim((string) ($payload['title'] ?? $payload['solicitationTitle'] ?? $payload['opportunityTitle'] ?? $payload['Award ID'] ?? $payload['awardId'] ?? 'Untitled'));
+            $description = trim((string) ($payload['description'] ?? $payload['fullParentPathName'] ?? $payload['synopsis'] ?? $payload['Recipient Name'] ?? ''));
+            $contractNumber = trim((string) ($payload['solicitationNumber'] ?? $payload['opportunityNumber'] ?? $payload['piid'] ?? $payload['Award ID'] ?? $payload['awardId'] ?? ''));
+            $agencyName = trim((string) ($payload['department'] ?? $payload['fullParentPathName'] ?? $payload['Awarding Agency'] ?? $payload['agencyName'] ?? $payload['agency'] ?? 'Unknown Agency'));
+            $vendorName = trim((string) ($payload['organizationName'] ?? $payload['awardeeName'] ?? $payload['Recipient Name'] ?? $payload['applicantType'] ?? 'Unknown Vendor'));
 
-        if (isset($payload['noticeId'])) {
-            $sourceType = 'sam_opportunity';
-        } elseif (isset($payload['opportunityNumber']) || (($payload['source_family'] ?? '') === 'grants_assistance')) {
-            $sourceType = 'grants';
-        } elseif (isset($payload['awardId']) || isset($payload['piid'])) {
-            $sourceType = 'sam_award';
-        } elseif (isset($payload['Award ID']) || isset($payload['generated_internal_id'])) {
-            $sourceType = 'usaspending';
-        }
+            if ($title === '') {
+                $warnings++;
+                $title = 'Untitled';
+            }
+            if ($agencyName === '') {
+                $warnings++;
+                $agencyName = 'Unknown Agency';
+            }
+            if ($vendorName === '') {
+                $warnings++;
+                $vendorName = 'Unknown Vendor';
+            }
 
-        $noticeType = detect_notice_type($payload);
-        $setAside = detect_set_aside($payload);
-        $values = parse_value_range($payload);
-        $sourceName = source_display_name($pdo, (int) $raw['source_id']);
+            if (isset($payload['noticeId'])) {
+                $sourceType = 'sam_opportunity';
+            } elseif (isset($payload['opportunityNumber']) || (($payload['source_family'] ?? '') === 'grants_assistance')) {
+                $sourceType = 'grants';
+            } elseif (isset($payload['awardId']) || isset($payload['piid'])) {
+                $sourceType = 'sam_award';
+            } elseif (isset($payload['Award ID']) || isset($payload['generated_internal_id'])) {
+                $sourceType = 'usaspending';
+            }
 
-        $contactName = $payload['pointOfContact'][0]['fullName']
-            ?? $payload['contacts'][0]['name']
-            ?? $payload['contactName']
-            ?? $payload['primaryContactName']
-            ?? null;
-        $contactEmail = $payload['pointOfContact'][0]['email']
-            ?? $payload['contacts'][0]['email']
-            ?? $payload['contactEmail']
-            ?? $payload['primaryContactEmail']
-            ?? null;
-        $contactPhone = $payload['pointOfContact'][0]['phone']
-            ?? $payload['contacts'][0]['phone']
-            ?? $payload['contactPhone']
-            ?? $payload['primaryContactPhone']
-            ?? null;
-        $office = $payload['office']
-            ?? $payload['officeAddress']
-            ?? $payload['departmentIndAgency']
-            ?? $payload['agency']
-            ?? $payload['agencyName']
-            ?? null;
-        $placeText = $payload['placeOfPerformance']
-            ?? $payload['placeOfPerformanceStateName']
-            ?? $payload['placeOfPerformanceCode']
-            ?? $payload['Place of Performance']
-            ?? $payload['city'] ?? null;
-        $placeState = place_state_from_text((string) $placeText);
-        $normalizedStatus = normalize_status($payload['type'] ?? $payload['status'] ?? $payload['noticeType'] ?? $noticeType);
+            $noticeType = detect_notice_type($payload);
+            $setAside = detect_set_aside($payload);
+            $values = parse_value_range($payload);
+            $sourceName = source_display_name($pdo, (int) $raw['source_id']);
 
-        $agencyId = get_or_create_agency($pdo, $agencyName, $payload['agencyCode'] ?? null);
-        $vendorId = get_or_create_vendor($pdo, $vendorName, $payload['ueiSAM'] ?? null, $payload['duns'] ?? null);
+            $contactName = $payload['pointOfContact'][0]['fullName']
+                ?? $payload['contacts'][0]['name']
+                ?? $payload['contactName']
+                ?? $payload['primaryContactName']
+                ?? null;
+            $contactEmail = $payload['pointOfContact'][0]['email']
+                ?? $payload['contacts'][0]['email']
+                ?? $payload['contactEmail']
+                ?? $payload['primaryContactEmail']
+                ?? null;
+            $contactPhone = $payload['pointOfContact'][0]['phone']
+                ?? $payload['contacts'][0]['phone']
+                ?? $payload['contactPhone']
+                ?? $payload['primaryContactPhone']
+                ?? null;
+            $office = $payload['office']
+                ?? $payload['officeAddress']
+                ?? $payload['departmentIndAgency']
+                ?? $payload['agency']
+                ?? $payload['agencyName']
+                ?? null;
+            $placeText = $payload['placeOfPerformance']
+                ?? $payload['placeOfPerformanceStateName']
+                ?? $payload['placeOfPerformanceCode']
+                ?? $payload['Place of Performance']
+                ?? $payload['city'] ?? null;
+            $placeState = place_state_from_text((string) $placeText);
 
-        $candidate = [
-            'source_record_id' => $raw['source_record_id'],
-            'contract_number' => $contractNumber,
-            'title' => $title,
-            'agency_id' => $agencyId,
-            'vendor_id' => $vendorId,
-            'award_date' => normalize_date($payload['awardDate'] ?? $payload['Start Date'] ?? null),
-            'posted_date' => normalize_date($payload['postedDate'] ?? null),
-        ];
-        $dup = dedupe_contract($pdo, $candidate);
+            $postedDate = normalize_date($payload['postedDate'] ?? $payload['openDate'] ?? null);
+            $awardDate = normalize_date($payload['awardDate'] ?? $payload['Start Date'] ?? $payload['awardDateSigned'] ?? null);
+            $responseDeadline = normalize_date($payload['responseDeadLine'] ?? $payload['responseDate'] ?? $payload['closeDate'] ?? null);
+            $startDate = normalize_date($payload['activeDate'] ?? $payload['Start Date'] ?? $payload['openDate'] ?? null);
+            $endDate = normalize_date($payload['archiveDate'] ?? $payload['End Date'] ?? $payload['closeDate'] ?? null);
+            $normalizedStatus = normalize_status($payload['type'] ?? $payload['status'] ?? $payload['noticeType'] ?? $noticeType);
 
-        $categorized = categorize_contract([
-            'agency_name' => $agencyName,
-            'title' => $title,
-            'description' => $description,
-            'naics_code' => $payload['naicsCode'] ?? $payload['naics'] ?? null,
-            'psc_code' => $payload['pscCode'] ?? null,
-        ], $pdo);
+            $isAwardSource = in_array($sourceType, ['usaspending', 'sam_award'], true);
+            $isAwardRow = $isAwardSource && $awardDate !== null;
+            if ($isAwardRow && ($normalizedStatus === '' || $normalizedStatus === 'unknown')) {
+                $normalizedStatus = 'awarded';
+            }
 
-        $categoryId = category_slug_to_id($pdo, $categorized['slug']);
+            $agencyId = get_or_create_agency($pdo, $agencyName, $payload['agencyCode'] ?? null);
+            $vendorId = get_or_create_vendor($pdo, $vendorName, $payload['ueiSAM'] ?? null, $payload['duns'] ?? null);
 
-        $actionability = derive_actionability([
-            'status' => $normalizedStatus,
-            'notice_type' => $noticeType,
-            'source_type' => $sourceType,
-            'title' => $title,
-            'description' => $description,
-            'response_deadline' => normalize_date($payload['responseDeadLine'] ?? $payload['responseDate'] ?? $payload['closeDate'] ?? null),
-            'contact_name' => $contactName,
-            'contact_email' => $contactEmail,
-            'contact_phone' => $contactPhone,
-            'contracting_office' => $office,
-            'award_amount' => $values['award_amount'],
-            'value_min' => $values['value_min'],
-            'value_max' => $values['value_max'],
-        ]);
+            $candidate = [
+                'source_record_id' => $raw['source_record_id'],
+                'contract_number' => $contractNumber,
+                'title' => $title,
+                'agency_id' => $agencyId,
+                'vendor_id' => $vendorId,
+                'award_date' => $awardDate,
+                'posted_date' => $postedDate,
+            ];
+            $dup = dedupe_contract($pdo, $candidate);
 
-        $insert->execute([
-            'source_id' => (int) $raw['source_id'],
-            'raw_id' => (int) $raw['id'],
-            'source_record_id' => $raw['source_record_id'],
-            'source_type' => $sourceType,
-            'source_name' => $sourceName,
-            'contract_number' => $contractNumber,
-            'title' => $title,
-            'description' => $description,
-            'agency_id' => $agencyId,
-            'vendor_id' => $vendorId,
-            'naics_code' => $payload['naicsCode'] ?? $payload['naics'] ?? null,
-            'psc_code' => $payload['pscCode'] ?? null,
-            'notice_type' => $noticeType,
-            'set_aside_code' => $setAside['set_aside_code'],
-            'set_aside_label' => $setAside['set_aside_label'],
-            'award_amount' => $values['award_amount'],
-            'value_min' => $values['value_min'],
-            'value_max' => $values['value_max'],
-            'posted_date' => normalize_date($payload['postedDate'] ?? $payload['openDate'] ?? null),
-            'award_date' => normalize_date($payload['awardDate'] ?? $payload['Start Date'] ?? $payload['awardDateSigned'] ?? null),
-            'response_deadline' => normalize_date($payload['responseDeadLine'] ?? $payload['responseDate'] ?? $payload['closeDate'] ?? null),
-            'start_date' => normalize_date($payload['activeDate'] ?? $payload['Start Date'] ?? $payload['openDate'] ?? null),
-            'end_date' => normalize_date($payload['archiveDate'] ?? $payload['End Date'] ?? $payload['closeDate'] ?? null),
-            'status' => $normalizedStatus,
-            'place_of_performance' => $placeText,
-            'contact_name' => $contactName,
-            'contact_email' => $contactEmail,
-            'contact_phone' => $contactPhone,
-            'contracting_office' => $office,
-            'contact_address' => $payload['officeAddress'] ?? null,
-            'place_state' => $placeState,
-            'source_url' => $raw['source_url'],
-            'category_id' => $categoryId,
-            'is_biddable_now' => $actionability['is_biddable_now'],
-            'is_upcoming_signal' => $actionability['is_upcoming_signal'],
-            'is_awarded' => $actionability['is_awarded'],
-            'deadline_soon' => $actionability['deadline_soon'],
-            'has_contact_info' => $actionability['has_contact_info'],
-            'has_value_estimate' => $actionability['has_value_estimate'],
-            'is_duplicate' => $dup['is_duplicate'],
-            'duplicate_of' => $dup['duplicate_of'],
-            'dedupe_reason' => $dup['reason'],
-        ]);
+            $categorized = categorize_contract([
+                'agency_name' => $agencyName,
+                'title' => $title,
+                'description' => $description,
+                'naics_code' => $payload['naicsCode'] ?? $payload['naics'] ?? null,
+                'psc_code' => $payload['pscCode'] ?? null,
+            ], $pdo);
 
-        $contractId = (int) $pdo->lastInsertId();
-        if ($contractId > 0 && $categoryId) {
-            $map = $pdo->prepare('INSERT IGNORE INTO contract_category_map (contract_id, category_id, confidence, rule_name) VALUES (:contract_id, :category_id, :confidence, :rule_name)');
-            $map->execute([
-                'contract_id' => $contractId,
-                'category_id' => $categoryId,
-                'confidence' => 1.00,
-                'rule_name' => $categorized['rule'],
+            $categoryId = category_slug_to_id($pdo, $categorized['slug']);
+
+            $actionability = derive_actionability([
+                'status' => $normalizedStatus,
+                'notice_type' => $noticeType,
+                'source_type' => $sourceType,
+                'title' => $title,
+                'description' => $description,
+                'response_deadline' => $responseDeadline,
+                'contact_name' => $contactName,
+                'contact_email' => $contactEmail,
+                'contact_phone' => $contactPhone,
+                'contracting_office' => $office,
+                'award_amount' => $values['award_amount'],
+                'value_min' => $values['value_min'],
+                'value_max' => $values['value_max'],
             ]);
-        }
+            if ($isAwardRow) {
+                $actionability['is_awarded'] = 1;
+            }
 
-        $mark->execute(['id' => (int) $raw['id']]);
-        $processed++;
+            $insert->execute([
+                'source_id' => (int) $raw['source_id'],
+                'raw_id' => (int) $raw['id'],
+                'source_record_id' => $raw['source_record_id'],
+                'source_type' => $sourceType,
+                'source_name' => $sourceName,
+                'contract_number' => $contractNumber,
+                'title' => $title,
+                'description' => $description,
+                'agency_id' => $agencyId,
+                'vendor_id' => $vendorId,
+                'naics_code' => $payload['naicsCode'] ?? $payload['naics'] ?? null,
+                'psc_code' => $payload['pscCode'] ?? null,
+                'notice_type' => $noticeType,
+                'set_aside_code' => $setAside['set_aside_code'],
+                'set_aside_label' => $setAside['set_aside_label'],
+                'award_amount' => $values['award_amount'],
+                'value_min' => $values['value_min'],
+                'value_max' => $values['value_max'],
+                'posted_date' => $postedDate,
+                'award_date' => $awardDate,
+                'response_deadline' => $responseDeadline,
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'status' => $normalizedStatus,
+                'place_of_performance' => $placeText,
+                'contact_name' => $contactName,
+                'contact_email' => $contactEmail,
+                'contact_phone' => $contactPhone,
+                'contracting_office' => $office,
+                'contact_address' => $payload['officeAddress'] ?? null,
+                'place_state' => $placeState,
+                'source_url' => $raw['source_url'],
+                'category_id' => $categoryId,
+                'is_biddable_now' => $actionability['is_biddable_now'],
+                'is_upcoming_signal' => $actionability['is_upcoming_signal'],
+                'is_awarded' => $actionability['is_awarded'],
+                'deadline_soon' => $actionability['deadline_soon'],
+                'has_contact_info' => $actionability['has_contact_info'],
+                'has_value_estimate' => $actionability['has_value_estimate'],
+                'is_duplicate' => $dup['is_duplicate'],
+                'duplicate_of' => $dup['duplicate_of'],
+                'dedupe_reason' => $dup['reason'],
+            ]);
+
+            $contractId = (int) $pdo->lastInsertId();
+            if ($contractId > 0 && $categoryId) {
+                $map = $pdo->prepare('INSERT IGNORE INTO contract_category_map (contract_id, category_id, confidence, rule_name) VALUES (:contract_id, :category_id, :confidence, :rule_name)');
+                $map->execute([
+                    'contract_id' => $contractId,
+                    'category_id' => $categoryId,
+                    'confidence' => 1.00,
+                    'rule_name' => $categorized['rule'],
+                ]);
+            }
+
+            $mark->execute(['id' => (int) $raw['id']]);
+            $processed++;
+        } catch (Throwable $e) {
+            $warnings++;
+            $line = sprintf(
+                "[%s] normalize_contracts.php WARN raw_id=%d source_id=%d %s\n",
+                date('Y-m-d H:i:s'),
+                (int) ($raw['id'] ?? 0),
+                (int) ($raw['source_id'] ?? 0),
+                $e->getMessage()
+            );
+            file_put_contents(__DIR__ . '/../logs/ingest.log', $line, FILE_APPEND);
+        }
     }
 
-    log_ingest($pdo, null, 'normalize_contracts.php', 'success', 'Normalized records', $fetched, $processed, $startedAt);
-    return ['fetched' => $fetched, 'processed' => $processed, 'status' => 'success'];
+    $message = sprintf('Normalized records warnings=%d skipped=%d', $warnings, $skipped);
+    log_ingest($pdo, null, 'normalize_contracts.php', 'success', $message, $fetched, $processed, $startedAt);
+    return ['fetched' => $fetched, 'processed' => $processed, 'warnings' => $warnings, 'skipped' => $skipped, 'status' => 'success'];
 }
 
 if (php_sapi_name() === 'cli' || basename(__FILE__) === basename($_SERVER['SCRIPT_FILENAME'] ?? '')) {

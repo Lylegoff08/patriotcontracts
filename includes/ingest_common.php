@@ -70,12 +70,19 @@ function log_ingest(PDO $pdo, ?int $sourceId, string $scriptName, string $status
 
 function upsert_raw_record(PDO $pdo, int $sourceId, ?string $sourceRecordId, ?string $sourceUrl, array $payload): int
 {
+    $sourceRecordId = trim((string) $sourceRecordId);
+    if ($sourceRecordId === '') {
+        // Keep an id for dedupe/upsert even when upstream payload omits a stable identifier.
+        $sourceRecordId = 'hash:' . substr(hash('sha256', json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)), 0, 48);
+    }
+    $sourceUrl = trim((string) $sourceUrl);
+
     $check = $pdo->prepare('SELECT id FROM contracts_raw WHERE source_id = :source_id AND source_record_id = :source_record_id LIMIT 1');
     $check->execute(['source_id' => $sourceId, 'source_record_id' => $sourceRecordId]);
     $existing = $check->fetchColumn();
 
     if ($existing) {
-        $update = $pdo->prepare('UPDATE contracts_raw SET payload_json = :payload_json, source_url = :source_url, fetched_at = NOW(), processed = 0 WHERE id = :id');
+        $update = $pdo->prepare('UPDATE contracts_raw SET payload_json = :payload_json, source_url = COALESCE(NULLIF(:source_url, ""), source_url), fetched_at = NOW(), processed = 0 WHERE id = :id');
         $update->execute([
             'payload_json' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             'source_url' => $sourceUrl,
@@ -88,7 +95,7 @@ function upsert_raw_record(PDO $pdo, int $sourceId, ?string $sourceRecordId, ?st
     $insert->execute([
         'source_id' => $sourceId,
         'source_record_id' => $sourceRecordId,
-        'source_url' => $sourceUrl,
+        'source_url' => $sourceUrl === '' ? null : $sourceUrl,
         'payload_json' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
     ]);
     return (int) $pdo->lastInsertId();
