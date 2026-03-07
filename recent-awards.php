@@ -26,9 +26,9 @@ include __DIR__ . '/templates/header.php';
 <?php endif; ?>
 <?php foreach ($rows as $row): ?>
   <article>
-    <h3><a href="contract.php?id=<?php echo (int) $row['id']; ?>"><?php echo e($row['title']); ?></a></h3>
-    <p class="muted"><?php echo e((string) $row['agency_name']); ?> | <?php echo e((string) $row['vendor_name']); ?> | <?php echo e((string) $row['category_name']); ?></p>
-    <p class="muted">#<?php echo e((string) $row['contract_number']); ?> | $<?php echo number_format((float) $row['award_amount'], 2); ?> | Award <?php echo e((string) $row['award_date']); ?> | Posted <?php echo e((string) $row['posted_date']); ?> | <?php echo e((string) $row['status']); ?></p>
+    <h3><a href="contract.php?id=<?php echo (int) $row['id']; ?>"><?php echo e(display_field_value('title', $row['title'] ?? null)); ?></a></h3>
+    <p class="muted"><?php echo e(display_field_value('agency', $row['agency_name'] ?? null)); ?> | <?php echo e(display_field_value('vendor', $row['vendor_name'] ?? null)); ?> | <?php echo e(display_field_value('category', $row['category_name'] ?? null)); ?></p>
+    <p class="muted">#<?php echo e(display_field_value('contract_number', $row['contract_number'] ?? null)); ?> | <?php echo e(display_contract_value($row, display_field_value('award_value', null))); ?> | Award <?php echo e(display_field_value('award_date', $row['award_date'] ?? null)); ?> | Posted <?php echo e(display_field_value('posted_date', $row['posted_date'] ?? null)); ?> | <?php echo e(display_field_value('status', $row['status'] ?? null)); ?></p>
   </article>
   <hr>
 <?php endforeach; ?>

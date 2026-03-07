@@ -80,7 +80,7 @@ include __DIR__ . '/templates/header.php';
 <?php if (!$canAdvancedSearch): ?>
   <p class="muted">Advanced filters are a Pro feature. Basic search is currently enabled.</p>
 <?php endif; ?>
-<form method="get" class="card filter-grid">
+<form method="get" class="card filter-grid filter-form">
   <input type="text" name="q" placeholder="Keyword" value="<?php echo e($filters['keyword']); ?>">
   <select name="category">
     <option value="">All Categories</option>
@@ -129,16 +129,16 @@ include __DIR__ . '/templates/header.php';
     <p>No contracts found.</p>
   <?php else: ?>
     <?php foreach ($rows as $row): ?>
-      <article>
-        <h3><a href="contract.php?id=<?php echo (int) $row['id']; ?>"><?php echo e($row['title']); ?></a></h3>
-        <p class="muted listing-meta"><?php echo e(display_text($row['agency_name'] ?? null)); ?> | <?php echo e(display_text($row['vendor_name'] ?? null)); ?> | <?php echo e(display_text($row['category_name'] ?? null)); ?></p>
-        <p class="muted listing-meta">#<?php echo e(display_text($row['contract_number'] ?? null)); ?> | <?php echo e(display_contract_value($row)); ?> | Posted: <?php echo e(display_date($row['posted_date'] ?? null)); ?> | Award: <?php echo e(display_date($row['award_date'] ?? null)); ?> | Due: <?php echo e(display_date($row['response_deadline'] ?? null)); ?> | <?php echo e(display_text($row['status'] ?? null)); ?></p>
+      <article class="listing-item">
+        <h3><a href="contract.php?id=<?php echo (int) $row['id']; ?>"><?php echo e(display_field_value('title', $row['title'] ?? null)); ?></a></h3>
+        <p class="muted listing-meta"><?php echo e(display_field_value('agency', $row['agency_name'] ?? null)); ?> | <?php echo e(display_field_value('vendor', $row['vendor_name'] ?? null)); ?> | <?php echo e(display_field_value('category', $row['category_name'] ?? null)); ?></p>
+        <p class="muted listing-meta">#<?php echo e(display_field_value('contract_number', $row['contract_number'] ?? null)); ?> | <?php echo e(display_contract_value($row, display_field_value('award_value', null))); ?> | Posted: <?php echo e(display_field_value('posted_date', $row['posted_date'] ?? null)); ?> | Award: <?php echo e(display_field_value('award_date', $row['award_date'] ?? null)); ?> | Due: <?php echo e(display_field_value('response_deadline', $row['response_deadline'] ?? null)); ?> | <?php echo e(display_field_value('status', $row['status'] ?? null)); ?></p>
         <p class="muted listing-meta">
           <?php if ((int) $row['is_biddable_now'] === 1): ?>Open Now | <?php endif; ?>
           <?php if ((int) $row['is_upcoming_signal'] === 1): ?>Early Signal | <?php endif; ?>
           <?php if ((int) $row['is_awarded'] === 1): ?>Awarded | <?php endif; ?>
           <?php if ((int) $row['deadline_soon'] === 1): ?>Deadline Soon | <?php endif; ?>
-          <?php echo e((string) ($row['set_aside_label'] ?? '')); ?>
+          <?php echo e(display_field_value('set_aside', $row['set_aside_label'] ?? null)); ?>
         </p>
         <p class="listing-desc"><?php echo e(contract_listing_description($row)); ?></p>
       </article>

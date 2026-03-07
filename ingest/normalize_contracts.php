@@ -1,10 +1,127 @@
-﻿<?php
+<?php
 
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/normalize.php';
 require_once __DIR__ . '/../includes/categorize.php';
 require_once __DIR__ . '/../includes/dedupe.php';
 require_once __DIR__ . '/../includes/ingest_common.php';
+
+function source_type_from_payload(array $payload): string
+{
+    if (isset($payload['noticeId'])) {
+        return 'sam_opportunity';
+    }
+    if (isset($payload['opportunityNumber']) || (($payload['source_family'] ?? '') === 'grants_assistance')) {
+        return 'grants';
+    }
+    if (isset($payload['awardId']) || isset($payload['piid'])) {
+        return 'sam_award';
+    }
+    if (isset($payload['Award ID']) || isset($payload['generated_internal_id'])) {
+        return 'usaspending';
+    }
+    return 'unknown';
+}
+
+function compose_place_of_performance(array $payload): ?string
+{
+    $place = payload_pick($payload, [
+        ['placeOfPerformance'],
+        ['placeOfPerformanceAddress'],
+        ['placeOfPerformanceStateName'],
+        ['placeOfPerformanceCode'],
+        ['Place of Performance'],
+        ['location'],
+    ]);
+    if ($place !== null) {
+        return $place;
+    }
+
+    $city = payload_pick($payload, [
+        ['placeOfPerformanceAddress', 'city'],
+        ['city'],
+    ]);
+    $state = payload_pick($payload, [
+        ['placeOfPerformanceAddress', 'state'],
+        ['placeOfPerformanceAddress', 'stateCode'],
+        ['placeOfPerformanceAddress', 'stateName'],
+        ['state'],
+        ['stateCode'],
+    ]);
+    $country = payload_pick($payload, [
+        ['placeOfPerformanceAddress', 'country'],
+        ['placeOfPerformanceAddress', 'countryCode'],
+        ['country'],
+        ['countryCode'],
+    ]);
+
+    return pick_first_nonempty([implode(', ', array_values(array_filter([$city, $state, $country])))]);
+}
+
+function extract_contact_data(array $payload): array
+{
+    $name = clean_contact_field(payload_pick($payload, [
+        ['pointOfContact', 0, 'fullName'],
+        ['pointOfContact', 0, 'name'],
+        ['pointOfContact', 0, 'title'],
+        ['contacts', 0, 'name'],
+        ['contacts', 0, 'fullName'],
+        ['primaryContactName'],
+        ['contactName'],
+    ]));
+
+    $email = clean_contact_field(payload_pick($payload, [
+        ['pointOfContact', 0, 'email'],
+        ['contacts', 0, 'email'],
+        ['primaryContactEmail'],
+        ['contactEmail'],
+        ['officeAddress', 'email'],
+    ]));
+
+    $phone = clean_contact_field(payload_pick($payload, [
+        ['pointOfContact', 0, 'phone'],
+        ['contacts', 0, 'phone'],
+        ['primaryContactPhone'],
+        ['contactPhone'],
+        ['officeAddress', 'phone'],
+    ]));
+
+    $office = clean_nullable(payload_pick($payload, [
+        ['office'],
+        ['officeAddress', 'officeName'],
+        ['officeAddress', 'name'],
+        ['departmentIndAgency'],
+        ['agency'],
+        ['agencyName'],
+        ['organization', 'office'],
+    ]));
+
+    $address = clean_nullable(payload_pick($payload, [
+        ['officeAddress'],
+        ['pointOfContact', 0, 'address'],
+        ['contacts', 0, 'address'],
+        ['address'],
+    ]));
+
+    return [
+        'name' => $name,
+        'email' => $email,
+        'phone' => $phone,
+        'office' => $office,
+        'address' => $address,
+    ];
+}
+
+function record_missing_field(array &$stats, string $field, bool $isMissing): void
+{
+    if (!$isMissing) {
+        return;
+    }
+    if (!isset($stats[$field])) {
+        $stats[$field] = 0;
+    }
+    $stats[$field]++;
+}
 
 function normalize_contracts(PDO $pdo): array
 {
@@ -13,6 +130,10 @@ function normalize_contracts(PDO $pdo): array
     $processed = 0;
     $warnings = 0;
     $skipped = 0;
+    $missingStats = [];
+
+    $config = app_config();
+    $debugMissing = (bool) (($config['ingest']['debug_missing_fields'] ?? false) || ((string) getenv('PC_DEBUG_MISSING_FIELDS') === '1'));
 
     $rows = $pdo->query('SELECT * FROM contracts_raw WHERE processed = 0 ORDER BY id ASC LIMIT 1000')->fetchAll();
     $fetched = count($rows);
@@ -89,85 +210,115 @@ function normalize_contracts(PDO $pdo): array
                 continue;
             }
 
-            $sourceType = 'unknown';
+            $sourceType = source_type_from_payload($payload);
+            $noticeType = clean_nullable(pick_first_nonempty([
+                detect_notice_type($payload),
+                payload_pick($payload, [['opportunityType'], ['noticeTypeCode']]),
+            ]));
 
-            $title = trim((string) ($payload['title'] ?? $payload['solicitationTitle'] ?? $payload['opportunityTitle'] ?? $payload['Award ID'] ?? $payload['awardId'] ?? 'Untitled'));
-            $description = trim((string) ($payload['description'] ?? $payload['fullParentPathName'] ?? $payload['synopsis'] ?? $payload['Recipient Name'] ?? ''));
-            $contractNumber = trim((string) ($payload['solicitationNumber'] ?? $payload['opportunityNumber'] ?? $payload['piid'] ?? $payload['Award ID'] ?? $payload['awardId'] ?? ''));
-            $agencyName = trim((string) ($payload['department'] ?? $payload['fullParentPathName'] ?? $payload['Awarding Agency'] ?? $payload['agencyName'] ?? $payload['agency'] ?? 'Unknown Agency'));
-            $vendorName = trim((string) ($payload['organizationName'] ?? $payload['awardeeName'] ?? $payload['Recipient Name'] ?? $payload['applicantType'] ?? 'Unknown Vendor'));
+            $title = pick_first_nonempty([
+                payload_pick($payload, [['title'], ['solicitationTitle'], ['opportunityTitle'], ['Award ID'], ['awardId'], ['subject']]),
+                payload_pick($payload, [['description'], ['synopsis']]),
+            ]);
 
-            if ($title === '') {
+            $description = clean_nullable(payload_pick($payload, [
+                ['description'],
+                ['synopsis'],
+                ['fullParentPathName'],
+                ['awardDescription'],
+                ['summary'],
+            ]));
+
+            $contractNumber = clean_nullable(payload_pick($payload, [
+                ['solicitationNumber'],
+                ['opportunityNumber'],
+                ['piid'],
+                ['Award ID'],
+                ['awardId'],
+                ['referenceNumber'],
+                ['solicitationId'],
+            ]));
+
+            if ($title === null) {
+                $title = pick_first_nonempty([
+                    $contractNumber,
+                    clean_nullable($raw['source_record_id'] ?? null),
+                    'Untitled Contract #' . (int) $raw['id'],
+                ]);
                 $warnings++;
-                $title = 'Untitled';
-            }
-            if ($agencyName === '') {
-                $warnings++;
-                $agencyName = 'Unknown Agency';
-            }
-            if ($vendorName === '') {
-                $warnings++;
-                $vendorName = 'Unknown Vendor';
             }
 
-            if (isset($payload['noticeId'])) {
-                $sourceType = 'sam_opportunity';
-            } elseif (isset($payload['opportunityNumber']) || (($payload['source_family'] ?? '') === 'grants_assistance')) {
-                $sourceType = 'grants';
-            } elseif (isset($payload['awardId']) || isset($payload['piid'])) {
-                $sourceType = 'sam_award';
-            } elseif (isset($payload['Award ID']) || isset($payload['generated_internal_id'])) {
-                $sourceType = 'usaspending';
-            }
+            $agencyName = clean_nullable(payload_pick($payload, [
+                ['agencyName'],
+                ['agency'],
+                ['department'],
+                ['Awarding Agency'],
+                ['Awarding Sub Agency'],
+                ['departmentIndAgency'],
+                ['office'],
+                ['organization', 'name'],
+                ['fullParentPathName'],
+            ]));
 
-            $noticeType = detect_notice_type($payload);
+            $vendorName = clean_nullable(payload_pick($payload, [
+                ['organizationName'],
+                ['awardeeName'],
+                ['Recipient Name'],
+                ['legalBusinessName'],
+                ['entityName'],
+                ['applicantType'],
+            ]));
+
+            $agencyId = $agencyName !== null ? get_or_create_agency($pdo, $agencyName, clean_nullable($payload['agencyCode'] ?? null)) : null;
+            $vendorId = $vendorName !== null ? get_or_create_vendor($pdo, $vendorName, clean_nullable($payload['ueiSAM'] ?? null), clean_nullable($payload['duns'] ?? null)) : null;
+
             $setAside = detect_set_aside($payload);
+            $setAsideCode = clean_nullable($setAside['set_aside_code'] ?? null);
+            $setAsideLabel = clean_nullable($setAside['set_aside_label'] ?? null);
+
             $values = parse_value_range($payload);
+            $postedDate = clean_date(payload_pick($payload, [['postedDate'], ['publishDate'], ['openDate'], ['createdDate']]));
+            $awardDate = clean_date(payload_pick($payload, [['awardDate'], ['awardDateSigned'], ['Start Date'], ['signedDate']]));
+            $responseDeadline = clean_date(payload_pick($payload, [['responseDeadLine'], ['responseDeadline'], ['responseDate'], ['closeDate'], ['dueDate'], ['offersDueDate']]));
+            $startDate = clean_date(payload_pick($payload, [['activeDate'], ['Start Date'], ['openDate'], ['periodOfPerformanceStartDate']]));
+            $endDate = clean_date(payload_pick($payload, [['archiveDate'], ['End Date'], ['closeDate'], ['periodOfPerformanceEndDate']]));
+
+            $statusRaw = pick_first_nonempty([
+                payload_pick($payload, [['status'], ['type'], ['opportunityStatus'], ['awardStatus']]),
+                $noticeType,
+            ]);
+            $normalizedStatus = normalize_status($statusRaw);
+
+            $contact = extract_contact_data($payload);
+            $placeText = clean_nullable(compose_place_of_performance($payload));
+            $placeState = clean_nullable(pick_first_nonempty([
+                payload_pick($payload, [['placeOfPerformanceAddress', 'state'], ['placeOfPerformanceAddress', 'stateCode'], ['state'], ['stateCode']]),
+                place_state_from_text($placeText),
+            ]));
+
             $sourceName = source_display_name($pdo, (int) $raw['source_id']);
+            $sourceUrl = clean_nullable(pick_first_nonempty([
+                $raw['source_url'] ?? null,
+                payload_pick($payload, [['uiLink'], ['url'], ['link'], ['opportunityUrl'], ['awardUrl'], ['resourceUrl']]),
+            ]));
 
-            $contactName = $payload['pointOfContact'][0]['fullName']
-                ?? $payload['contacts'][0]['name']
-                ?? $payload['contactName']
-                ?? $payload['primaryContactName']
-                ?? null;
-            $contactEmail = $payload['pointOfContact'][0]['email']
-                ?? $payload['contacts'][0]['email']
-                ?? $payload['contactEmail']
-                ?? $payload['primaryContactEmail']
-                ?? null;
-            $contactPhone = $payload['pointOfContact'][0]['phone']
-                ?? $payload['contacts'][0]['phone']
-                ?? $payload['contactPhone']
-                ?? $payload['primaryContactPhone']
-                ?? null;
-            $office = $payload['office']
-                ?? $payload['officeAddress']
-                ?? $payload['departmentIndAgency']
-                ?? $payload['agency']
-                ?? $payload['agencyName']
-                ?? null;
-            $placeText = $payload['placeOfPerformance']
-                ?? $payload['placeOfPerformanceStateName']
-                ?? $payload['placeOfPerformanceCode']
-                ?? $payload['Place of Performance']
-                ?? $payload['city'] ?? null;
-            $placeState = place_state_from_text((string) $placeText);
-
-            $postedDate = normalize_date($payload['postedDate'] ?? $payload['openDate'] ?? null);
-            $awardDate = normalize_date($payload['awardDate'] ?? $payload['Start Date'] ?? $payload['awardDateSigned'] ?? null);
-            $responseDeadline = normalize_date($payload['responseDeadLine'] ?? $payload['responseDate'] ?? $payload['closeDate'] ?? null);
-            $startDate = normalize_date($payload['activeDate'] ?? $payload['Start Date'] ?? $payload['openDate'] ?? null);
-            $endDate = normalize_date($payload['archiveDate'] ?? $payload['End Date'] ?? $payload['closeDate'] ?? null);
-            $normalizedStatus = normalize_status($payload['type'] ?? $payload['status'] ?? $payload['noticeType'] ?? $noticeType);
+            $naicsCode = clean_nullable(payload_pick($payload, [
+                ['naicsCode'],
+                ['naics'],
+                ['naicsCodeValue'],
+                ['naicsCodes', 0],
+            ]));
+            $pscCode = clean_nullable(payload_pick($payload, [
+                ['pscCode'],
+                ['psc'],
+                ['pscCodeValue'],
+            ]));
 
             $isAwardSource = in_array($sourceType, ['usaspending', 'sam_award'], true);
             $isAwardRow = $isAwardSource && $awardDate !== null;
             if ($isAwardRow && ($normalizedStatus === '' || $normalizedStatus === 'unknown')) {
                 $normalizedStatus = 'awarded';
             }
-
-            $agencyId = get_or_create_agency($pdo, $agencyName, $payload['agencyCode'] ?? null);
-            $vendorId = get_or_create_vendor($pdo, $vendorName, $payload['ueiSAM'] ?? null, $payload['duns'] ?? null);
 
             $candidate = [
                 'source_record_id' => $raw['source_record_id'],
@@ -181,11 +332,11 @@ function normalize_contracts(PDO $pdo): array
             $dup = dedupe_contract($pdo, $candidate);
 
             $categorized = categorize_contract([
-                'agency_name' => $agencyName,
-                'title' => $title,
-                'description' => $description,
-                'naics_code' => $payload['naicsCode'] ?? $payload['naics'] ?? null,
-                'psc_code' => $payload['pscCode'] ?? null,
+                'agency_name' => (string) ($agencyName ?? ''),
+                'title' => (string) $title,
+                'description' => (string) ($description ?? ''),
+                'naics_code' => $naicsCode,
+                'psc_code' => $pscCode,
             ], $pdo);
 
             $categoryId = category_slug_to_id($pdo, $categorized['slug']);
@@ -197,10 +348,10 @@ function normalize_contracts(PDO $pdo): array
                 'title' => $title,
                 'description' => $description,
                 'response_deadline' => $responseDeadline,
-                'contact_name' => $contactName,
-                'contact_email' => $contactEmail,
-                'contact_phone' => $contactPhone,
-                'contracting_office' => $office,
+                'contact_name' => $contact['name'],
+                'contact_email' => $contact['email'],
+                'contact_phone' => $contact['phone'],
+                'contracting_office' => $contact['office'],
                 'award_amount' => $values['award_amount'],
                 'value_min' => $values['value_min'],
                 'value_max' => $values['value_max'],
@@ -220,11 +371,11 @@ function normalize_contracts(PDO $pdo): array
                 'description' => $description,
                 'agency_id' => $agencyId,
                 'vendor_id' => $vendorId,
-                'naics_code' => $payload['naicsCode'] ?? $payload['naics'] ?? null,
-                'psc_code' => $payload['pscCode'] ?? null,
+                'naics_code' => $naicsCode,
+                'psc_code' => $pscCode,
                 'notice_type' => $noticeType,
-                'set_aside_code' => $setAside['set_aside_code'],
-                'set_aside_label' => $setAside['set_aside_label'],
+                'set_aside_code' => $setAsideCode,
+                'set_aside_label' => $setAsideLabel,
                 'award_amount' => $values['award_amount'],
                 'value_min' => $values['value_min'],
                 'value_max' => $values['value_max'],
@@ -235,13 +386,13 @@ function normalize_contracts(PDO $pdo): array
                 'end_date' => $endDate,
                 'status' => $normalizedStatus,
                 'place_of_performance' => $placeText,
-                'contact_name' => $contactName,
-                'contact_email' => $contactEmail,
-                'contact_phone' => $contactPhone,
-                'contracting_office' => $office,
-                'contact_address' => $payload['officeAddress'] ?? null,
+                'contact_name' => $contact['name'],
+                'contact_email' => $contact['email'],
+                'contact_phone' => $contact['phone'],
+                'contracting_office' => $contact['office'],
+                'contact_address' => $contact['address'],
                 'place_state' => $placeState,
-                'source_url' => $raw['source_url'],
+                'source_url' => $sourceUrl,
                 'category_id' => $categoryId,
                 'is_biddable_now' => $actionability['is_biddable_now'],
                 'is_upcoming_signal' => $actionability['is_upcoming_signal'],
@@ -265,6 +416,43 @@ function normalize_contracts(PDO $pdo): array
                 ]);
             }
 
+            record_missing_field($missingStats, 'agency_name', $agencyName === null);
+            record_missing_field($missingStats, 'vendor_name', $vendorName === null);
+            record_missing_field($missingStats, 'notice_type', $noticeType === null);
+            record_missing_field($missingStats, 'contract_number', $contractNumber === null);
+            record_missing_field($missingStats, 'posted_date', $postedDate === null);
+            record_missing_field($missingStats, 'response_deadline', $responseDeadline === null);
+            record_missing_field($missingStats, 'set_aside', $setAsideLabel === null && $setAsideCode === null);
+            record_missing_field($missingStats, 'naics_code', $naicsCode === null);
+            record_missing_field($missingStats, 'psc_code', $pscCode === null);
+            record_missing_field($missingStats, 'place_of_performance', $placeText === null);
+            record_missing_field($missingStats, 'contact_name', $contact['name'] === null);
+            record_missing_field($missingStats, 'contact_email', $contact['email'] === null);
+            record_missing_field($missingStats, 'contact_phone', $contact['phone'] === null);
+            record_missing_field($missingStats, 'description', $description === null);
+            record_missing_field($missingStats, 'source_url', $sourceUrl === null);
+
+            if ($debugMissing) {
+                $line = json_encode([
+                    'ts' => date('c'),
+                    'raw_id' => (int) $raw['id'],
+                    'source_id' => (int) $raw['source_id'],
+                    'source_record_id' => $raw['source_record_id'],
+                    'missing' => [
+                        'agency_name' => $agencyName === null,
+                        'notice_type' => $noticeType === null,
+                        'contract_number' => $contractNumber === null,
+                        'response_deadline' => $responseDeadline === null,
+                        'naics_code' => $naicsCode === null,
+                        'place_of_performance' => $placeText === null,
+                        'contact_email' => $contact['email'] === null,
+                    ],
+                ], JSON_UNESCAPED_SLASHES);
+                if ($line !== false) {
+                    file_put_contents(__DIR__ . '/../logs/normalize_missing_fields.log', $line . "\n", FILE_APPEND);
+                }
+            }
+
             $mark->execute(['id' => (int) $raw['id']]);
             $processed++;
         } catch (Throwable $e) {
@@ -280,9 +468,23 @@ function normalize_contracts(PDO $pdo): array
         }
     }
 
+    if (!empty($missingStats)) {
+        $summaryLine = json_encode([
+            'ts' => date('c'),
+            'script' => 'normalize_contracts.php',
+            'fetched' => $fetched,
+            'processed' => $processed,
+            'warnings' => $warnings,
+            'missing_field_counts' => $missingStats,
+        ], JSON_UNESCAPED_SLASHES);
+        if ($summaryLine !== false) {
+            file_put_contents(__DIR__ . '/../logs/normalize_missing_fields.log', $summaryLine . "\n", FILE_APPEND);
+        }
+    }
+
     $message = sprintf('Normalized records warnings=%d skipped=%d', $warnings, $skipped);
     log_ingest($pdo, null, 'normalize_contracts.php', 'success', $message, $fetched, $processed, $startedAt);
-    return ['fetched' => $fetched, 'processed' => $processed, 'warnings' => $warnings, 'skipped' => $skipped, 'status' => 'success'];
+    return ['fetched' => $fetched, 'processed' => $processed, 'warnings' => $warnings, 'skipped' => $skipped, 'status' => 'success', 'missing_field_counts' => $missingStats];
 }
 
 if (php_sapi_name() === 'cli' || basename(__FILE__) === basename($_SERVER['SCRIPT_FILENAME'] ?? '')) {

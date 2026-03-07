@@ -20,11 +20,11 @@ return [
         ],
         'sam_opportunities' => [
             'base_url' => 'https://api.sam.gov/prod/opportunities/v2/search',
-            'api_key' => '',
+            'api_key' => 'SAM-5e4fdb8a-75a6-4eca-b2e3-3680859e6bda',
         ],
         'sam_awards' => [
             'base_url' => 'https://api.sam.gov/contract-awards/v1/search',
-            'api_key' => '',
+            'api_key' => 'SAM-5e4fdb8a-75a6-4eca-b2e3-3680859e6bda',
         ],
         'grants' => [
             'base_url' => 'https://api.grants.gov/v1/api/search2',

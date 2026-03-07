@@ -30,9 +30,9 @@ include __DIR__ . '/templates/header.php';
 <?php endif; ?>
 <?php foreach ($rows as $row): ?>
   <article>
-    <h3><a href="contract.php?id=<?php echo (int) $row['id']; ?>"><?php echo e($row['title']); ?></a></h3>
-    <p class="muted"><?php echo e(display_text($row['agency_name'] ?? null)); ?> | <?php echo e(display_text($row['vendor_name'] ?? null)); ?> | <?php echo e(display_text($row['category_name'] ?? null)); ?></p>
-    <p class="muted">#<?php echo e(display_text($row['contract_number'] ?? null)); ?> | <?php echo e(display_contract_value($row)); ?> | Due <?php echo e(display_date($row['response_deadline'] ?? null)); ?> | End <?php echo e(display_date($row['end_date'] ?? null)); ?> | Award <?php echo e(display_date($row['award_date'] ?? null)); ?> | Posted <?php echo e(display_date($row['posted_date'] ?? null)); ?> | <?php echo e(display_text($row['status'] ?? null)); ?></p>
+    <h3><a href="contract.php?id=<?php echo (int) $row['id']; ?>"><?php echo e(display_field_value('title', $row['title'] ?? null)); ?></a></h3>
+    <p class="muted"><?php echo e(display_field_value('agency', $row['agency_name'] ?? null)); ?> | <?php echo e(display_field_value('vendor', $row['vendor_name'] ?? null)); ?> | <?php echo e(display_field_value('category', $row['category_name'] ?? null)); ?></p>
+    <p class="muted">#<?php echo e(display_field_value('contract_number', $row['contract_number'] ?? null)); ?> | <?php echo e(display_contract_value($row, display_field_value('award_value', null))); ?> | Due <?php echo e(display_field_value('response_deadline', $row['response_deadline'] ?? null)); ?> | End <?php echo e(display_field_value('end_date', $row['end_date'] ?? null)); ?> | Award <?php echo e(display_field_value('award_date', $row['award_date'] ?? null)); ?> | Posted <?php echo e(display_field_value('posted_date', $row['posted_date'] ?? null)); ?> | <?php echo e(display_field_value('status', $row['status'] ?? null)); ?></p>
   </article>
   <hr>
 <?php endforeach; ?>

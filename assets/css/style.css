@@ -67,8 +67,47 @@ input, select, button {
 .compact-pipeline h2 { margin: 0 0 0.45rem; font-size: 1rem; }
 .compact-pipeline p { margin: 0.25rem 0; font-size: 0.9rem; line-height: 1.2; }
 
+.landing-main { padding: 2rem 0 0.5rem; }
+.landing-header { position: sticky; top: 0; z-index: 10; }
+.landing-nav a { margin-left: 1.1rem; }
+.landing-hero {
+  padding: 2rem;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  border-color: #c7d4e5;
+}
+.landing-kicker {
+  margin: 0 0 0.5rem;
+  color: var(--primary);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.landing-hero h1 { margin: 0 0 0.8rem; font-size: clamp(1.9rem, 3vw, 2.7rem); }
+.landing-summary {
+  margin: 0;
+  max-width: 760px;
+  color: #374151;
+  line-height: 1.55;
+}
+.landing-cta {
+  margin-top: 1.25rem;
+  display: flex;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+.btn-lg {
+  padding: 0.85rem 1.35rem;
+  font-size: 1.02rem;
+  font-weight: 600;
+}
+.landing-section { margin-top: 1.5rem; }
+.landing-section h2 { margin: 0 0 0.8rem; }
+.landing-features h3 { margin-top: 0; }
+
 @media (max-width: 900px) {
   .grid-2, .grid-3 { grid-template-columns: 1fr; }
   .filter-grid { grid-template-columns: 1fr; }
   nav a { margin-left: 0.5rem; font-size: 0.95rem; }
+  .landing-hero { padding: 1.25rem; }
+  .landing-cta { flex-direction: column; }
+  .landing-cta .btn { width: 100%; text-align: center; }
 }

@@ -13,3 +13,6 @@
 [2026-03-05 21:24:12] calculate_stats.php SUCCESS fetched=2 processed=9 Daily stats recalculated
 [2026-03-05 21:31:33] recategorize_contracts.php SUCCESS fetched=2500 processed=2500 Recategorized contracts
 [2026-03-05 21:31:33] calculate_stats.php SUCCESS fetched=2 processed=16 Daily stats recalculated
+[2026-03-06 00:57:53] normalize_contracts.php SUCCESS fetched=1000 processed=1000 Normalized records warnings=0 skipped=0
+[2026-03-06 01:30:16] calculate_stats.php SUCCESS fetched=1 processed=142 Daily stats recalculated
+[2026-03-06 01:31:04] ingest_sam_opportunities.php ERROR fetched=0 processed=0 SAM opportunities API key is missing in config.php

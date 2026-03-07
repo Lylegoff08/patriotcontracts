@@ -25,11 +25,12 @@ include __DIR__ . '/templates/header.php';
 <?php endif; ?>
 <?php foreach ($rows as $row): ?>
   <article>
-    <h3><a href="contract.php?id=<?php echo (int) $row['id']; ?>"><?php echo e($row['title']); ?></a></h3>
-    <p class="muted"><?php echo e((string) $row['agency_name']); ?> | <?php echo e((string) $row['vendor_name']); ?> | <?php echo e((string) $row['category_name']); ?></p>
-    <p class="muted">#<?php echo e((string) $row['contract_number']); ?> | Notice: <?php echo e((string) $row['notice_type']); ?> | Posted <?php echo e((string) $row['posted_date']); ?> | <?php echo e((string) $row['status']); ?></p>
+    <h3><a href="contract.php?id=<?php echo (int) $row['id']; ?>"><?php echo e(display_field_value('title', $row['title'] ?? null)); ?></a></h3>
+    <p class="muted"><?php echo e(display_field_value('agency', $row['agency_name'] ?? null)); ?> | <?php echo e(display_field_value('vendor', $row['vendor_name'] ?? null)); ?> | <?php echo e(display_field_value('category', $row['category_name'] ?? null)); ?></p>
+    <p class="muted">#<?php echo e(display_field_value('contract_number', $row['contract_number'] ?? null)); ?> | Notice: <?php echo e(display_field_value('notice_type', $row['notice_type'] ?? null)); ?> | Posted <?php echo e(display_field_value('posted_date', $row['posted_date'] ?? null)); ?> | <?php echo e(display_field_value('status', $row['status'] ?? null)); ?></p>
   </article>
   <hr>
 <?php endforeach; ?>
 </section>
 <?php include __DIR__ . '/templates/footer.php'; ?>
+

@@ -110,47 +110,47 @@ function contract_listing_description(array $row): string
     $parts = [];
 
     $description = trim((string) ($row['description'] ?? ''));
-    if ($description !== '') {
+    if (!is_empty_display_value($description)) {
         $parts[] = $description;
     }
 
     $contractNumber = trim((string) ($row['contract_number'] ?? ''));
-    if ($contractNumber !== '') {
+    if (!is_empty_display_value($contractNumber)) {
         $parts[] = 'Contract #: ' . $contractNumber;
     }
 
     $naics = trim((string) ($row['naics_code'] ?? ''));
-    if ($naics !== '') {
+    if (!is_empty_display_value($naics)) {
         $parts[] = 'NAICS: ' . $naics;
     }
 
     $psc = trim((string) ($row['psc_code'] ?? ''));
-    if ($psc !== '') {
+    if (!is_empty_display_value($psc)) {
         $parts[] = 'PSC: ' . $psc;
     }
 
     $contact = trim((string) ($row['contact_name'] ?? ''));
-    if ($contact !== '') {
+    if (!is_empty_display_value($contact)) {
         $parts[] = 'POC: ' . $contact;
     }
 
     $office = trim((string) ($row['contracting_office'] ?? ''));
-    if ($office !== '') {
+    if (!is_empty_display_value($office)) {
         $parts[] = 'Office: ' . $office;
     }
 
     $pop = trim((string) ($row['place_of_performance'] ?? ''));
-    if ($pop !== '') {
+    if (!is_empty_display_value($pop)) {
         $parts[] = 'Place of Performance: ' . $pop;
     }
 
     $setAside = trim((string) ($row['set_aside_label'] ?? ''));
-    if ($setAside !== '') {
+    if (!is_empty_display_value($setAside)) {
         $parts[] = 'Set-Aside: ' . $setAside;
     }
 
     $noticeType = trim((string) ($row['notice_type'] ?? ''));
-    if ($noticeType !== '') {
+    if (!is_empty_display_value($noticeType)) {
         $parts[] = 'Notice: ' . $noticeType;
     }
 
@@ -161,18 +161,81 @@ function contract_listing_description(array $row): string
     return $summary;
 }
 
+function is_empty_display_value($value): bool
+{
+    $text = strtolower(trim((string) $value));
+    if ($text === '') {
+        return true;
+    }
+
+    static $junk = ['n/a', 'na', 'null', 'none', 'not available', 'not provided', 'unknown', '-', '--'];
+    return in_array($text, $junk, true);
+}
+
 function display_text(?string $value, string $fallback = 'N/A'): string
 {
-    $value = trim((string) $value);
-    return $value === '' ? $fallback : $value;
+    $text = trim((string) $value);
+    return is_empty_display_value($text) ? $fallback : $text;
 }
 
 function display_date(?string $value, string $fallback = 'N/A'): string
 {
+    $text = trim((string) $value);
+    if (is_empty_display_value($text)) {
+        return $fallback;
+    }
+
+    $ts = strtotime($text);
+    if ($ts === false) {
+        return $text;
+    }
+
+    return date('Y-m-d', $ts);
+}
+
+function display_field_value(string $field, ?string $value): string
+{
+    static $fallbacks = [
+        'title' => 'Untitled listing',
+        'agency' => 'Not provided',
+        'department' => 'Not provided',
+        'vendor' => 'Not provided',
+        'category' => 'Not categorized',
+        'notice_type' => 'Not specified',
+        'contract_number' => 'Not listed',
+        'posted_date' => 'Date not listed',
+        'award_date' => 'Not listed',
+        'response_deadline' => 'No deadline listed',
+        'end_date' => 'Not listed',
+        'set_aside' => 'Not specified',
+        'naics_code' => 'Not listed',
+        'naics_description' => 'Description unavailable',
+        'psc_code' => 'Not listed',
+        'place_of_performance' => 'Location not specified',
+        'place_state' => 'State not listed',
+        'contact_name' => 'No contact listed',
+        'contact_email' => 'No contact email listed',
+        'contact_phone' => 'No contact phone listed',
+        'contracting_office' => 'Not listed',
+        'contact_address' => 'Address not listed',
+        'award_value' => 'Not listed',
+        'description' => 'No summary provided',
+        'status' => 'Status not specified',
+        'source_name' => 'Unknown source',
+        'source_url' => 'Source notice unavailable',
+    ];
+
+    $fallback = $fallbacks[$field] ?? 'Not provided';
+
+    $dateFields = ['posted_date', 'award_date', 'response_deadline', 'end_date'];
+    if (in_array($field, $dateFields, true)) {
+        return display_date($value, $fallback);
+    }
+
     return display_text($value, $fallback);
 }
 
-function display_contract_value(array $row, string $fallback = 'N/A'): string
+function display_contract_value(array $row, string $fallback = 'Not listed'): string
 {
     $award = $row['award_amount'] ?? null;
     if ($award !== null && $award !== '' && is_numeric($award)) {
