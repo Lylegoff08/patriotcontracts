@@ -156,3 +156,46 @@
     width: 100%;
   }
 }
+
+@media (max-width: 640px) {
+  .admin-table {
+    min-width: 640px;
+  }
+
+  .admin-form-inline {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .admin-form-inline > input[type="text"],
+  .admin-form-inline > select,
+  .admin-form-inline > textarea,
+  .admin-form-inline > button,
+  .admin-form-inline > .btn {
+    width: 100%;
+  }
+
+  .admin-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .admin-content p,
+  .admin-content code,
+  .admin-table td,
+  .admin-table th {
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-content {
+    padding: 0.8rem;
+  }
+
+  .admin-topbar {
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+}

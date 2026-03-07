@@ -35,7 +35,7 @@ try {
     <h1>Subscribe</h1>
     <section class="card">
       <p class="warn">Unable to start checkout: <?php echo e($error); ?></p>
-      <p><a href="pricing.php">Back to Pricing</a></p>
+      <p><a href="<?php echo e(app_url('pricing.php')); ?>">Back to Pricing</a></p>
     </section>
     <?php
     include __DIR__ . '/templates/footer.php';

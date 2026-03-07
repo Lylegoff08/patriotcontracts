@@ -26,8 +26,9 @@ include __DIR__ . '/templates/header.php';
 ?>
 <h1>Category: <?php echo e((string) ($category['name'] ?? 'Unknown')); ?></h1>
 <section class="card">
+<?php if (!$contracts): ?><p>No contracts found in this category.</p><?php endif; ?>
 <?php foreach ($contracts as $c): ?>
-  <p><a href="contract.php?id=<?php echo (int) $c['id']; ?>"><?php echo e($c['title']); ?></a> <span class="muted"><?php echo e((string) $c['posted_date']); ?></span></p>
+  <p><a href="<?php echo e(app_url('contract.php?id=' . (int) $c['id'])); ?>"><?php echo e(display_field_value('title', $c['title'] ?? null)); ?></a><?php if (($posted = display_field_or_null('posted_date', $c['posted_date'] ?? null)) !== null): ?> <span class="muted"><?php echo e($posted); ?></span><?php endif; ?></p>
 <?php endforeach; ?>
 </section>
 <?php include __DIR__ . '/templates/footer.php'; ?>

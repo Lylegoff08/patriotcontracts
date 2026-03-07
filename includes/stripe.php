@@ -97,7 +97,7 @@ function create_checkout_session(PDO $pdo, int $userId, string $planCode): array
         throw new RuntimeException('User not found.');
     }
 
-    $base = rtrim((string) (app_config()['app']['base_url'] ?? ''), '/');
+    $base = app_base_url();
 
     $params = [
         'mode' => 'subscription',

@@ -90,7 +90,7 @@ function oauth_verify_state(string $provider, string $state): bool
 
 function oauth_base_url(): string
 {
-    return rtrim((string) (app_config()['app']['base_url'] ?? ''), '/');
+    return app_base_url();
 }
 
 function oauth_upsert_user(PDO $pdo, string $provider, string $providerId, string $email, string $fullName): array

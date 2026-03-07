@@ -3,7 +3,7 @@ require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/auth.php';
 
 $config = app_config();
-$baseUrl = rtrim((string) ($config['app']['base_url'] ?? ''), '/');
+$baseUrl = app_base_url();
 $user = current_user();
 $pageTitle = 'PatriotContracts | Government Contract Discovery';
 $pdo = db();
@@ -11,7 +11,34 @@ $siteName = site_setting($pdo, 'site_name', 'PatriotContracts');
 $tagline = site_setting($pdo, 'tagline', 'Federal contract discovery and monitoring');
 $heroTitle = site_setting($pdo, 'homepage_hero_title', 'Find government contract opportunities faster.');
 $heroSubtitle = site_setting($pdo, 'homepage_hero_subtitle', 'PatriotContracts helps contractors, analysts, and procurement researchers discover and review U.S. government opportunities in a cleaner, structured interface.');
-$pricingCtaText = site_setting($pdo, 'pricing_cta_text', 'Buy Subscription');
+$coverage = $pdo->query('SELECT
+    COUNT(*) AS indexed_records,
+    COUNT(DISTINCT cc.agency_id) AS agency_count,
+    COUNT(DISTINCT cc.vendor_id) AS vendor_count,
+    COUNT(DISTINCT cc.category_id) AS category_count,
+    MAX(cc.posted_date) AS latest_posted
+    FROM contracts_clean cc
+    LEFT JOIN listing_overrides lo ON lo.contract_id = cc.id
+    LEFT JOIN grant_overrides go ON go.contract_id = cc.id
+    WHERE cc.is_duplicate = 0
+      AND COALESCE(lo.is_hidden, go.is_hidden, 0) = 0')->fetch() ?: [];
+
+$pipeline = $pdo->query('SELECT
+    SUM(cc.is_biddable_now = 1 AND (cc.response_deadline IS NULL OR cc.response_deadline >= CURDATE()) AND cc.is_awarded = 0) AS open_now,
+    SUM(cc.is_upcoming_signal = 1 AND cc.is_awarded = 0) AS early_signals,
+    SUM(cc.deadline_soon = 1 AND cc.response_deadline BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)) AS due_soon,
+    SUM(cc.is_awarded = 1) AS awarded
+    FROM contracts_clean cc
+    LEFT JOIN listing_overrides lo ON lo.contract_id = cc.id
+    LEFT JOIN grant_overrides go ON go.contract_id = cc.id
+    WHERE cc.is_duplicate = 0
+      AND COALESCE(lo.is_hidden, go.is_hidden, 0) = 0')->fetch() ?: [];
+
+$indexedRecords = (int) ($coverage['indexed_records'] ?? 0);
+$agencyCount = (int) ($coverage['agency_count'] ?? 0);
+$vendorCount = (int) ($coverage['vendor_count'] ?? 0);
+$categoryCount = (int) ($coverage['category_count'] ?? 0);
+$latestPosted = display_field_or_null('posted_date', $coverage['latest_posted'] ?? null);
 
 ?>
 <!doctype html>
@@ -26,15 +53,17 @@ $pricingCtaText = site_setting($pdo, 'pricing_cta_text', 'Buy Subscription');
 <body>
 <header class="site-header">
   <div class="container row">
-    <a class="brand" href="<?php echo e($baseUrl); ?>/index.php"><?php echo e($siteName); ?></a>
+    <a class="brand" href="<?php echo e(app_url('index.php')); ?>"><?php echo e($siteName); ?></a>
     <nav class="site-nav">
-      <a class="nav-link" href="<?php echo e($baseUrl); ?>/home.php">Browse Listings</a>
-      <a class="nav-link" href="<?php echo e($baseUrl); ?>/search.php">Search</a>
-      <a class="nav-link" href="<?php echo e($baseUrl); ?>/pricing.php">Pricing</a>
+      <a class="nav-link" href="<?php echo e(app_url('home.php')); ?>">Browse Listings</a>
+      <a class="nav-link" href="<?php echo e(app_url('search.php')); ?>">Search</a>
+      <a class="nav-link" href="<?php echo e(app_url('stats.php')); ?>">Stats</a>
+      <a class="nav-link" href="<?php echo e(app_url('pricing.php')); ?>">Pricing</a>
       <?php if ($user): ?>
-        <a class="nav-link" href="<?php echo e($baseUrl); ?>/dashboard.php">Dashboard</a>
+        <a class="nav-link" href="<?php echo e(app_url('dashboard.php')); ?>">Dashboard</a>
       <?php else: ?>
-        <a class="nav-link" href="<?php echo e($baseUrl); ?>/login.php">Login</a>
+        <a class="nav-link" href="<?php echo e(app_url('login.php')); ?>">Sign In</a>
+        <a class="nav-link" href="<?php echo e(app_url('register.php')); ?>">Create Account</a>
       <?php endif; ?>
     </nav>
   </div>
@@ -46,9 +75,31 @@ $pricingCtaText = site_setting($pdo, 'pricing_cta_text', 'Buy Subscription');
     <h1><?php echo e($heroTitle); ?></h1>
     <p class="landing-summary"><?php echo e($heroSubtitle); ?></p>
     <div class="landing-cta">
-      <a class="btn btn-lg" href="<?php echo e($baseUrl); ?>/home.php">Browse Listings</a>
-      <a class="btn btn-secondary btn-lg" href="<?php echo e($baseUrl); ?>/pricing.php"><?php echo e($pricingCtaText); ?></a>
+      <a class="btn btn-lg" href="<?php echo e(app_url('home.php')); ?>">Browse Public Listings</a>
+      <a class="btn btn-secondary btn-lg" href="<?php echo e(app_url('pricing.php')); ?>">View Membership Plans</a>
     </div>
+  </section>
+
+  <section class="landing-section">
+    <h2>Coverage Snapshot</h2>
+    <div class="grid-3">
+      <article class="card">
+        <h3><?php echo number_format($indexedRecords); ?></h3>
+        <p class="muted">Public records indexed</p>
+      </article>
+      <article class="card">
+        <h3><?php echo number_format($agencyCount); ?></h3>
+        <p class="muted">Agencies represented</p>
+      </article>
+      <article class="card">
+        <h3><?php echo number_format($categoryCount); ?></h3>
+        <p class="muted">Categories tracked</p>
+      </article>
+    </div>
+    <p class="muted">
+      Sources include SAM.gov, USAspending.gov, and Grants.gov public datasets.
+      <?php if ($latestPosted !== null): ?>Latest posted record in this index: <?php echo e($latestPosted); ?>.<?php endif; ?>
+    </p>
   </section>
 
   <section class="landing-section">
@@ -61,6 +112,38 @@ $pricingCtaText = site_setting($pdo, 'pricing_cta_text', 'Buy Subscription');
       <article class="card">
         <h3>Search with less noise</h3>
         <p class="muted">Use focused search and filtering to find contracts by agency, vendor, category, and key identifiers.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="landing-section">
+    <h2>Actionable Pipeline Snapshot</h2>
+    <div class="grid-2">
+      <article class="card">
+        <p>Open Now: <strong><?php echo number_format((int) ($pipeline['open_now'] ?? 0)); ?></strong></p>
+        <p>Early Signals: <strong><?php echo number_format((int) ($pipeline['early_signals'] ?? 0)); ?></strong></p>
+      </article>
+      <article class="card">
+        <p>Deadline Soon: <strong><?php echo number_format((int) ($pipeline['due_soon'] ?? 0)); ?></strong></p>
+        <p>Awarded: <strong><?php echo number_format((int) ($pipeline['awarded'] ?? 0)); ?></strong></p>
+      </article>
+    </div>
+  </section>
+
+  <section class="landing-section">
+    <h2>How It Works</h2>
+    <div class="grid-3 landing-features">
+      <article class="card">
+        <h3>1. Ingest</h3>
+        <p class="muted">Public procurement records are pulled from federal source datasets.</p>
+      </article>
+      <article class="card">
+        <h3>2. Normalize</h3>
+        <p class="muted">Fields are cleaned so agencies, dates, and descriptions are easier to review.</p>
+      </article>
+      <article class="card">
+        <h3>3. Triage</h3>
+        <p class="muted">Browse, search, and sort records by open opportunities, signals, deadlines, and awards.</p>
       </article>
     </div>
   </section>
@@ -101,6 +184,6 @@ $pricingCtaText = site_setting($pdo, 'pricing_cta_text', 'Buy Subscription');
     <small><?php echo e($tagline); ?></small>
   </div>
 </footer>
-<script src="<?php echo e($baseUrl); ?>/assets/js/app.js"></script>
+<script src="<?php echo e(app_url('assets/js/app.js')); ?>"></script>
 </body>
 </html>

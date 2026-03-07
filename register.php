@@ -5,7 +5,7 @@ require_once __DIR__ . '/includes/security.php';
 require_once __DIR__ . '/includes/stripe.php';
 
 if (current_user()) {
-    header('Location: dashboard.php');
+    header('Location: ' . app_url('dashboard.php'));
     exit;
 }
 
@@ -15,6 +15,9 @@ if (!in_array($plan, membership_plan_codes(), true)) {
 }
 
 $error = '';
+$googleOauthEnabled = oauth_provider_configured('google');
+$appleOauthEnabled = oauth_provider_configured('apple');
+$facebookOauthEnabled = oauth_provider_configured('facebook');
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_csrf_post();
     $plan = strtoupper(request_str('plan', 'MEMBER_BASIC'));
@@ -44,10 +47,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $pageTitle = 'PatriotContracts | Register';
 include __DIR__ . '/templates/header.php';
 ?>
-<h1>Register</h1>
+<h1>Create Member Account</h1>
 <section class="card">
   <?php if ($error): ?><p class="warn"><?php echo e($error); ?></p><?php endif; ?>
-  <p>Choose a paid plan to unlock member tools. Free browsing is always available without an account.</p>
+  <p class="muted">Choose a plan, create your account, and continue to secure checkout. Public browsing remains available without registration.</p>
   <form method="post" class="form">
     <input type="hidden" name="_csrf" value="<?php echo e(csrf_token()); ?>">
     <label>Full name <input type="text" name="full_name" value="<?php echo e(request_str('full_name')); ?>"></label>
@@ -55,18 +58,22 @@ include __DIR__ . '/templates/header.php';
     <label>Password <input type="password" name="password" required minlength="8"></label>
     <label>Plan
       <select name="plan">
-        <option value="MEMBER_BASIC" <?php echo $plan === 'MEMBER_BASIC' ? 'selected' : ''; ?>>Member Basic</option>
-        <option value="MEMBER_PRO" <?php echo $plan === 'MEMBER_PRO' ? 'selected' : ''; ?>>Member Pro</option>
-        <option value="API_MEMBER" <?php echo $plan === 'API_MEMBER' ? 'selected' : ''; ?>>API Member</option>
+        <option value="MEMBER_BASIC" <?php echo $plan === 'MEMBER_BASIC' ? 'selected' : ''; ?>>Member Basic (Core)</option>
+        <option value="MEMBER_PRO" <?php echo $plan === 'MEMBER_PRO' ? 'selected' : ''; ?>>Member Pro (Advanced)</option>
+        <option value="API_MEMBER" <?php echo $plan === 'API_MEMBER' ? 'selected' : ''; ?>>API Member (Programmatic)</option>
       </select>
     </label>
     <button class="btn" type="submit">Continue to Checkout</button>
   </form>
+  <p class="muted">After payment, your account is activated with the selected plan features.</p>
+  <p><a class="btn btn-secondary" href="<?php echo e(app_url('pricing.php')); ?>">Compare Plans</a></p>
   <hr>
-  <p>Or continue with:</p>
-  <p><a class="btn btn-secondary" href="oauth/google/start.php?plan=<?php echo e($plan); ?>">Google</a></p>
-  <p><a class="btn btn-secondary" href="oauth/apple/start.php?plan=<?php echo e($plan); ?>">Apple</a></p>
-  <p><a class="btn btn-secondary" href="oauth/facebook/start.php?plan=<?php echo e($plan); ?>">Facebook</a></p>
-  <p><a href="login.php">Already have an account?</a></p>
+  <?php if ($googleOauthEnabled || $appleOauthEnabled || $facebookOauthEnabled): ?>
+    <p>Or register with:</p>
+    <?php if ($googleOauthEnabled): ?><p><a class="btn btn-secondary" href="<?php echo e(app_url('oauth/google/start.php?plan=' . urlencode($plan))); ?>">Google</a></p><?php endif; ?>
+    <?php if ($appleOauthEnabled): ?><p><a class="btn btn-secondary" href="<?php echo e(app_url('oauth/apple/start.php?plan=' . urlencode($plan))); ?>">Apple</a></p><?php endif; ?>
+    <?php if ($facebookOauthEnabled): ?><p><a class="btn btn-secondary" href="<?php echo e(app_url('oauth/facebook/start.php?plan=' . urlencode($plan))); ?>">Facebook</a></p><?php endif; ?>
+  <?php endif; ?>
+  <p><a href="<?php echo e(app_url('login.php')); ?>">Already have an account? Sign in</a></p>
 </section>
 <?php include __DIR__ . '/templates/footer.php'; ?>

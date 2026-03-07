@@ -135,6 +135,12 @@ Notes:
 - Summary: Updated normalization to treat records as award rows only when `source_type IN ('usaspending','sam_award')` and `award_date IS NOT NULL`; for those rows, status now falls back to `awarded` when blank/unknown and `is_awarded` is forced to `1` during normalize backfill.
 - Commit:
 
+- Date: 2026-03-07
+- Task: Public-readiness cleanup pass (BASE_URL consistency, root entry cleanup, listing data sanitation, public UX trust polish)
+- Files changed: `includes/db.php`, `includes/functions.php`, `includes/auth.php`, `includes/oauth.php`, `includes/stripe.php`, `templates/header.php`, `templates/footer.php`, `index.php`, `home.php`, `search.php`, `contract.php`, `agency.php`, `vendor.php`, `category.php`, `open-this-week.php`, `early-signals.php`, `deadline-soon.php`, `recent-awards.php`, `archive.php`, `login.php`, `register.php`, `pricing.php`, `verify-email.php`, `reset-password.php`, `subscribe.php`, `billing/success.php`, `billing/cancel.php`, `api-docs.php`, `api-access.php`, `assets/css/main.css`, `../index.php`, `../.htaccess`, `AI_TASKS.md`
+- Summary: Added runtime host-aware BASE_URL resolution and shared app URL helpers, removed public nav/path leaks to static localhost assumptions, added root redirect to `/patriotcontracts/` and disabled root directory indexes, standardized public listing metadata rendering to hide empty/junk values, validated/safeguarded source links, suppressed non-configured social OAuth CTAs, replaced placeholder ad/demo block with source-trust copy, and aligned public API docs examples to app-relative endpoints.
+- Commit:
+
 ---
 
 ## REVIEW NOTES

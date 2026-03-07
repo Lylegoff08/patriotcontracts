@@ -122,7 +122,15 @@ function description_clean_generic_text(string $text): array
 
     $text = strip_tags($text);
     $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $text = preg_replace('/\b(?:naics|psc|solicitation(?: number)?|notice id|set-aside)\s*:\s*[A-Za-z0-9\-\(\), ]{2,80}(?=[.;]|\s{2,}|$)/i', '', $text) ?? $text;
+    $text = preg_replace('/\b(?:far|dfars)\s*\d{1,3}(?:\.\d{1,4})?(?:-\d+)?\b[^.;]{0,140}(?=[.;]|$)/i', '', $text) ?? $text;
+    $text = preg_replace('/\b(?:clause|provision)\s+\d{2,3}\.\d{1,4}(?:-\d+)?\b[^.;]{0,140}(?=[.;]|$)/i', '', $text) ?? $text;
+    $text = preg_replace('/(?:\|\s*){2,}|(?:-\s*){3,}|(?:_\s*){3,}/', ' ', $text) ?? $text;
+    $text = preg_replace('/\s*[;|]\s*/', '. ', $text) ?? $text;
+    $text = preg_replace('/\b(?:please\s+see|refer\s+to)\s+(?:the\s+)?(?:attached|full)\s+(?:notice|solicitation)\b[^.;]{0,120}(?=[.;]|$)/i', '', $text) ?? $text;
+    $text = preg_replace('/\b(?:this\s+is\s+not\s+a\s+solicitation|for\s+informational\s+purposes\s+only)\b[^.;]{0,120}(?=[.;]|$)/i', '', $text) ?? $text;
     $text = preg_replace('/\s+,/', ',', $text) ?? $text;
+    $text = preg_replace('/\.\s*\./', '.', $text) ?? $text;
     $text = normalize_whitespace($text);
     $text = description_strip_terminal_punctuation($text);
 

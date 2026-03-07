@@ -30,7 +30,7 @@ include __DIR__ . '/templates/header.php';
 ?>
 <h1>Reset Password</h1>
 <section class="card">
-  <?php if ($message): ?><p><?php echo e($message); ?>. <a href="login.php">Login</a></p><?php endif; ?>
+  <?php if ($message): ?><p><?php echo e($message); ?>. <a href="<?php echo e(app_url('login.php')); ?>">Login</a></p><?php endif; ?>
   <?php if ($error): ?><p class="warn"><?php echo e($error); ?></p><?php endif; ?>
 
   <?php if (!$message): ?>

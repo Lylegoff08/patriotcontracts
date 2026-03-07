@@ -46,11 +46,12 @@ $sql = 'SELECT cc.id,
     cc.description_raw, cc.description_clean,
     cc.contract_number, cc.award_amount, cc.value_min, cc.value_max, cc.posted_date, cc.award_date,
     cc.response_deadline, cc.status, cc.naics_code, cc.psc_code, cc.contact_name, cc.contracting_office, cc.place_of_performance, cc.place_state,
-    cc.set_aside_label, cc.notice_type, cc.is_biddable_now, cc.is_upcoming_signal, cc.is_awarded, cc.deadline_soon,
+    cc.set_aside_label, cc.notice_type, cc.source_type, cc.is_biddable_now, cc.is_upcoming_signal, cc.is_awarded, cc.deadline_soon, COALESCE(NULLIF(cc.source_name, ""), s.name) AS source_name,
     a.name AS agency_name, v.name AS vendor_name, COALESCE(ocat.name, cat.name) AS category_name
     FROM contracts_clean cc
     LEFT JOIN listing_overrides lo ON lo.contract_id = cc.id
     LEFT JOIN grant_overrides go ON go.contract_id = cc.id
+    LEFT JOIN sources s ON s.id = cc.source_id
     LEFT JOIN agencies a ON a.id = cc.agency_id
     LEFT JOIN vendors v ON v.id = cc.vendor_id
     LEFT JOIN contract_categories cat ON cat.id = cc.category_id
@@ -83,9 +84,9 @@ $setAsides = $pdo->query('SELECT DISTINCT cc.set_aside_label
 $baseQuery = $_GET;
 unset($baseQuery['page']);
 $baseQs = http_build_query($baseQuery);
-$prevUrl = 'search.php?' . $baseQs . ($baseQs !== '' ? '&' : '') . 'page=' . max(1, $page - 1);
-$nextUrl = 'search.php?' . $baseQs . ($baseQs !== '' ? '&' : '') . 'page=' . min($totalPages, $page + 1);
-$exportUrl = 'search_export.php?' . http_build_query($_GET);
+$prevUrl = app_url('search.php?' . $baseQs . ($baseQs !== '' ? '&' : '') . 'page=' . max(1, $page - 1));
+$nextUrl = app_url('search.php?' . $baseQs . ($baseQs !== '' ? '&' : '') . 'page=' . min($totalPages, $page + 1));
+$exportUrl = app_url('search_export.php?' . http_build_query($_GET));
 
 include __DIR__ . '/templates/header.php';
 ?>
@@ -109,8 +110,8 @@ include __DIR__ . '/templates/header.php';
       <option value="signals" <?php echo $filters['mode'] === 'signals' ? 'selected' : ''; ?>>Early Signals</option>
       <option value="awarded" <?php echo $filters['mode'] === 'awarded' ? 'selected' : ''; ?>>Awarded / Historical</option>
     </select>
-    <select name="agency"><option value="0">All Agencies</option><?php foreach ($agencies as $a): ?><option value="<?php echo (int) $a['id']; ?>" <?php echo $filters['agency'] === (int) $a['id'] ? 'selected' : ''; ?>><?php echo e($a['name']); ?></option><?php endforeach; ?></select>
-    <select name="vendor"><option value="0">All Vendors</option><?php foreach ($vendors as $v): ?><option value="<?php echo (int) $v['id']; ?>" <?php echo $filters['vendor'] === (int) $v['id'] ? 'selected' : ''; ?>><?php echo e($v['name']); ?></option><?php endforeach; ?></select>
+    <select name="agency"><option value="0">All Agencies</option><?php foreach ($agencies as $a): ?><option value="<?php echo (int) $a['id']; ?>" <?php echo $filters['agency'] === (int) $a['id'] ? 'selected' : ''; ?>><?php echo e(display_field_value('agency', $a['name'] ?? null)); ?></option><?php endforeach; ?></select>
+    <select name="vendor"><option value="0">All Vendors</option><?php foreach ($vendors as $v): ?><option value="<?php echo (int) $v['id']; ?>" <?php echo $filters['vendor'] === (int) $v['id'] ? 'selected' : ''; ?>><?php echo e(display_field_value('vendor', $v['name'] ?? null)); ?></option><?php endforeach; ?></select>
     <input type="text" name="location" placeholder="State or location" value="<?php echo e($filters['location']); ?>">
     <input type="number" step="0.01" min="0" name="min_value" placeholder="Min value" value="<?php echo e($filters['min_value']); ?>">
     <input type="number" step="0.01" min="0" name="max_value" placeholder="Max value" value="<?php echo e($filters['max_value']); ?>">
@@ -143,18 +144,38 @@ include __DIR__ . '/templates/header.php';
     <p>No contracts found.</p>
   <?php else: ?>
     <?php foreach ($rows as $row): ?>
+      <?php if (is_suspicious_public_record($row)) { continue; } ?>
       <?php $listingDescription = contract_listing_description($row); ?>
+      <?php $state = derive_public_contract_state($row); ?>
       <article class="listing-item">
-        <h3><a href="contract.php?id=<?php echo (int) $row['id']; ?>"><?php echo e(display_field_value('title', $row['title'] ?? null)); ?></a></h3>
-        <p class="muted listing-meta"><?php echo e(display_field_value('agency', $row['agency_name'] ?? null)); ?> | <?php echo e(display_field_value('vendor', $row['vendor_name'] ?? null)); ?> | <?php echo e(display_field_value('category', $row['category_name'] ?? null)); ?></p>
-        <p class="muted listing-meta">#<?php echo e(display_field_value('contract_number', $row['contract_number'] ?? null)); ?> | <?php echo e(display_contract_value($row, display_field_value('award_value', null))); ?> | Posted: <?php echo e(display_field_value('posted_date', $row['posted_date'] ?? null)); ?> | Award: <?php echo e(display_field_value('award_date', $row['award_date'] ?? null)); ?> | Due: <?php echo e(display_field_value('response_deadline', $row['response_deadline'] ?? null)); ?> | <?php echo e(display_field_value('status', $row['status'] ?? null)); ?></p>
-        <p class="muted listing-meta">
-          <?php if ((int) $row['is_biddable_now'] === 1): ?>Open Now | <?php endif; ?>
-          <?php if ((int) $row['is_upcoming_signal'] === 1): ?>Early Signal | <?php endif; ?>
-          <?php if ((int) $row['is_awarded'] === 1): ?>Awarded | <?php endif; ?>
-          <?php if ((int) $row['deadline_soon'] === 1): ?>Deadline Soon | <?php endif; ?>
-          <?php echo e(display_field_value('set_aside', $row['set_aside_label'] ?? null)); ?>
-        </p>
+        <?php
+          $metaTop = join_display_parts([
+            display_field_or_null('agency', $row['agency_name'] ?? null),
+            display_field_or_null('vendor', $row['vendor_name'] ?? null),
+            display_field_or_null('category', $row['category_name'] ?? null),
+            display_field_or_null('contract_number', $row['contract_number'] ?? null),
+            display_contract_value_or_null($row),
+            display_field_or_null('source_name', $row['source_name'] ?? null),
+          ]);
+          $metaMid = join_display_parts([
+            ($posted = display_field_or_null('posted_date', $row['posted_date'] ?? null)) ? 'Posted: ' . $posted : '',
+            ($award = display_field_or_null('award_date', $row['award_date'] ?? null)) ? 'Award: ' . $award : '',
+            ($due = display_field_or_null('response_deadline', $row['response_deadline'] ?? null)) ? 'Due: ' . $due : '',
+            display_field_or_null('status', $row['status'] ?? null),
+          ]);
+          $intent = join_display_parts([
+            in_array('Open Now', $state['tags'], true) ? 'Open Now' : '',
+            in_array('Early Signal', $state['tags'], true) ? 'Early Signal' : '',
+            in_array('Awarded', $state['tags'], true) ? 'Awarded' : '',
+            in_array('Deadline Soon', $state['tags'], true) ? 'Deadline Soon' : '',
+            in_array('Archived', $state['tags'], true) ? 'Archived' : '',
+            display_field_or_null('set_aside', $row['set_aside_label'] ?? null),
+          ]);
+        ?>
+        <h3><a href="<?php echo e(app_url('contract.php?id=' . (int) $row['id'])); ?>"><?php echo e(display_field_value('title', $row['title'] ?? null)); ?></a></h3>
+        <?php if ($metaTop !== ''): ?><p class="muted listing-meta"><?php echo e($metaTop); ?></p><?php endif; ?>
+        <?php if ($metaMid !== ''): ?><p class="muted listing-meta"><?php echo e($metaMid); ?></p><?php endif; ?>
+        <?php if ($intent !== ''): ?><p class="muted listing-meta"><?php echo e($intent); ?></p><?php endif; ?>
         <?php if ($listingDescription !== ''): ?><p class="listing-desc"><?php echo e($listingDescription); ?></p><?php endif; ?>
       </article>
       <hr>

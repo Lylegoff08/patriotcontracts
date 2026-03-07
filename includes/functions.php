@@ -8,6 +8,38 @@ function e(string $value): string
     return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
 }
 
+function app_base_url(): string
+{
+    return rtrim((string) (app_config()['app']['base_url'] ?? ''), '/');
+}
+
+function app_url(string $path = ''): string
+{
+    $path = trim($path);
+    if ($path === '') {
+        return app_base_url();
+    }
+    return app_base_url() . '/' . ltrim($path, '/');
+}
+
+function oauth_provider_configured(string $provider): bool
+{
+    $provider = strtolower(trim($provider));
+    $cfg = app_config()['oauth'][$provider] ?? null;
+    if (!is_array($cfg)) {
+        return false;
+    }
+
+    if ($provider === 'google' || $provider === 'apple') {
+        return trim((string) ($cfg['client_id'] ?? '')) !== '' && trim((string) ($cfg['redirect_uri'] ?? '')) !== '';
+    }
+    if ($provider === 'facebook') {
+        return trim((string) ($cfg['app_id'] ?? '')) !== '' && trim((string) ($cfg['redirect_uri'] ?? '')) !== '';
+    }
+
+    return false;
+}
+
 function request_str(string $key, string $default = ''): string
 {
     $value = $_GET[$key] ?? $_POST[$key] ?? $default;
@@ -125,6 +157,296 @@ function page_title(string $default = 'PatriotContracts'): string
     return $default;
 }
 
+function parse_public_date(?string $value): ?DateTimeImmutable
+{
+    $text = trim((string) $value);
+    if ($text === '' || is_empty_display_value($text)) {
+        return null;
+    }
+
+    $normalized = normalize_date($text);
+    if ($normalized === null) {
+        return null;
+    }
+
+    $date = DateTimeImmutable::createFromFormat('Y-m-d', $normalized);
+    if (!$date) {
+        return null;
+    }
+
+    return $date->setTime(0, 0, 0);
+}
+
+function public_today(): DateTimeImmutable
+{
+    return new DateTimeImmutable('today');
+}
+
+function normalize_public_label_case(string $text): string
+{
+    $trimmed = trim($text);
+    if ($trimmed === '') {
+        return $trimmed;
+    }
+
+    $upper = strtoupper($trimmed);
+    $letters = preg_replace('/[^A-Za-z]/', '', $trimmed) ?? '';
+    $upperLetters = preg_replace('/[^A-Z]/', '', $trimmed) ?? '';
+    $isMostlyUpper = $letters !== '' && (strlen($upperLetters) / max(1, strlen($letters))) > 0.78;
+
+    if ($isMostlyUpper) {
+        $trimmed = ucwords(strtolower($trimmed));
+    }
+
+    $acronyms = ['US', 'USA', 'DOD', 'HHS', 'VA', 'GSA', 'NASA', 'DHS', 'FAA', 'FEMA', 'SBA', 'USDA', 'DOE', 'DOI', 'DOJ', 'CDC', 'CMS'];
+    foreach ($acronyms as $acronym) {
+        $trimmed = preg_replace('/\b' . preg_quote(ucfirst(strtolower($acronym)), '/') . '\b/', $acronym, $trimmed) ?? $trimmed;
+    }
+
+    return normalize_whitespace($trimmed);
+}
+
+function normalize_agency_display(?string $value): ?string
+{
+    $text = clean_string($value);
+    if ($text === null) {
+        return null;
+    }
+
+    $text = preg_replace('~https?://\S+~i', ' ', $text) ?? $text;
+    $text = preg_replace('/\s*(?:\||;|>|::|\/{2,}|\\\\)\s*/', ' | ', $text) ?? $text;
+    $text = preg_replace('/\s+\/\s+/', ' | ', $text) ?? $text;
+    $text = preg_replace('/\s*,\s*(?=[A-Z][A-Za-z ]{3,}\s*,)/', ' | ', $text) ?? $text;
+
+    if (preg_match('/^[A-Z0-9&\-\s\(\)]+(?:\.[A-Z0-9&\-\s\(\)]+){1,}$/', $text)) {
+        $text = preg_replace('/\.+/', ' | ', $text) ?? $text;
+    }
+
+    $parts = preg_split('/\s+\|\s+/', normalize_whitespace($text)) ?: [];
+    $deduped = [];
+    $seen = [];
+    foreach ($parts as $part) {
+        $clean = normalize_whitespace((string) $part);
+        $clean = preg_replace('/\b([A-Za-z][A-Za-z &\-\(\)]{3,})\s+\1\b/i', '$1', $clean) ?? $clean;
+        $clean = trim($clean, " \t\n\r\0\x0B,.;-");
+        if ($clean === '' || is_empty_display_value($clean)) {
+            continue;
+        }
+
+        $canon = preg_replace('/[^A-Z0-9]/', '', strtoupper($clean)) ?? '';
+        if ($canon === '' || isset($seen[$canon])) {
+            continue;
+        }
+        $seen[$canon] = true;
+        $deduped[] = normalize_public_label_case($clean);
+        if (count($deduped) >= 3) {
+            break;
+        }
+    }
+
+    if (!$deduped) {
+        return null;
+    }
+
+    return implode(' | ', $deduped);
+}
+
+function normalize_public_status_label(?string $value): ?string
+{
+    $status = normalize_status($value);
+    $map = [
+        'active' => 'Active',
+        'open' => 'Open',
+        'closed' => 'Closed',
+        'awarded' => 'Awarded',
+        'archived' => 'Archived',
+        'expired' => 'Expired',
+        'cancelled' => 'Cancelled',
+        'forecast' => 'Forecast',
+        'historical' => 'Historical',
+        'unknown' => null,
+    ];
+
+    if (isset($map[$status])) {
+        return $map[$status];
+    }
+
+    $text = clean_string($value);
+    return $text === null ? null : normalize_public_label_case($text);
+}
+
+function sanitize_public_field_value(string $field, ?string $value): ?string
+{
+    if ($field === 'source_url') {
+        return safe_external_url($value);
+    }
+
+    if (in_array($field, ['posted_date', 'award_date', 'response_deadline', 'end_date'], true)) {
+        $date = parse_public_date($value);
+        return $date ? $date->format('Y-m-d') : null;
+    }
+
+    $text = clean_string($value);
+    if ($text === null || is_empty_display_value($text)) {
+        return null;
+    }
+
+    if (preg_match('~https?://~i', $text) && $field !== 'description') {
+        $text = preg_replace('~https?://\S+~i', '', $text) ?? $text;
+        $text = normalize_whitespace($text);
+    }
+
+    if ($text === '' || is_empty_display_value($text)) {
+        return null;
+    }
+
+    if ($field === 'agency' || $field === 'department' || $field === 'contracting_office') {
+        return normalize_agency_display($text);
+    }
+
+    if ($field === 'status') {
+        return normalize_public_status_label($text);
+    }
+
+    if ($field === 'source_name' || $field === 'category' || $field === 'set_aside') {
+        return normalize_public_label_case($text);
+    }
+
+    if ($field === 'naics_code' || $field === 'psc_code') {
+        $code = strtoupper(trim($text));
+        if (!preg_match('/^[A-Z0-9\-]{2,12}$/', $code)) {
+            return null;
+        }
+        return $code;
+    }
+
+    return $text;
+}
+
+function derive_public_contract_state(array $row): array
+{
+    $today = public_today();
+    $postedDate = parse_public_date($row['posted_date'] ?? null);
+    $awardDate = parse_public_date($row['award_date'] ?? null);
+    $dueDate = parse_public_date($row['response_deadline'] ?? null);
+    $endDate = parse_public_date($row['end_date'] ?? null);
+    $hasDueText = !is_empty_display_value($row['response_deadline'] ?? null);
+
+    $status = strtolower(trim((string) ($row['status'] ?? '')));
+    $noticeType = strtolower(trim((string) ($row['notice_type'] ?? '')));
+    $sourceType = strtolower(trim((string) ($row['source_type'] ?? '')));
+    $title = strtolower(trim((string) ($row['title'] ?? '')));
+    $desc = strtolower(trim((string) ($row['description'] ?? ($row['description_clean'] ?? $row['description_raw'] ?? ''))));
+    $text = $status . ' ' . $noticeType . ' ' . $sourceType . ' ' . $title . ' ' . $desc;
+
+    $explicitEarly = (bool) preg_match('/rfi|request for information|sources sought|presolicitation|pre-solicitation|market research|forecast|industry day/', $text);
+    $explicitAward = (bool) preg_match('/award|awarded|historical|contract action/', $text);
+    $explicitOpen = (bool) preg_match('/open|active|solicitation|opportunity|combined synopsis|special notice|request for proposal|invitation for bid/', $text);
+    $explicitClosed = (bool) preg_match('/closed|archived|expired|cancelled|canceled|inactive|ended/', $text);
+
+    $isAwarded = ((int) ($row['is_awarded'] ?? 0) === 1)
+        || $awardDate !== null
+        || $explicitAward
+        || $sourceType === 'usaspending'
+        || $sourceType === 'sam_award';
+
+    $isPastDue = $dueDate !== null && $dueDate < $today;
+    $isEnded = $endDate !== null && $endDate < $today;
+
+    $isArchived = !$isAwarded && ($explicitClosed || $isPastDue || $isEnded);
+    $isEarlySignal = !$isAwarded && !$isArchived && (((int) ($row['is_upcoming_signal'] ?? 0) === 1) || $explicitEarly);
+
+    $dueIsFutureOrToday = $dueDate !== null && $dueDate >= $today;
+    $hasInvalidDue = $hasDueText && $dueDate === null;
+    $postedFresh = $postedDate === null || $postedDate >= $today->sub(new DateInterval('P45D'));
+
+    $isOpenNow = false;
+    if (!$isAwarded && !$isArchived && !$isEarlySignal && !$hasInvalidDue) {
+        if ($dueDate !== null) {
+            $isOpenNow = $dueIsFutureOrToday && (((int) ($row['is_biddable_now'] ?? 0) === 1) || $explicitOpen);
+        } else {
+            $isOpenNow = (((int) ($row['is_biddable_now'] ?? 0) === 1) || $explicitOpen) && $postedFresh;
+        }
+    }
+
+    $deadlineSoon = false;
+    if ($isOpenNow && $dueDate !== null) {
+        $days = (int) $today->diff($dueDate)->format('%r%a');
+        $deadlineSoon = $days >= 0 && $days <= 7;
+    }
+
+    $tags = [];
+    if ($isOpenNow) {
+        $tags[] = 'Open Now';
+    }
+    if ($isEarlySignal) {
+        $tags[] = 'Early Signal';
+    }
+    if ($isAwarded) {
+        $tags[] = 'Awarded';
+    }
+    if ($deadlineSoon) {
+        $tags[] = 'Deadline Soon';
+    }
+    if ($isArchived && !$isAwarded) {
+        $tags[] = 'Archived';
+    }
+
+    $publicStatus = 'Unknown';
+    if ($isAwarded) {
+        $publicStatus = 'Awarded';
+    } elseif ($isArchived) {
+        $publicStatus = 'Archived';
+    } elseif ($deadlineSoon) {
+        $publicStatus = 'Deadline Soon';
+    } elseif ($isOpenNow) {
+        $publicStatus = 'Open Now';
+    } elseif ($isEarlySignal) {
+        $publicStatus = 'Early Signals';
+    } else {
+        $fallbackStatus = normalize_public_status_label($row['status'] ?? null);
+        if ($fallbackStatus !== null) {
+            $publicStatus = $fallbackStatus;
+        }
+    }
+
+    return [
+        'is_open_now' => $isOpenNow,
+        'is_early_signal' => $isEarlySignal,
+        'is_awarded' => $isAwarded,
+        'is_archived' => $isArchived,
+        'deadline_soon' => $deadlineSoon,
+        'public_status' => $publicStatus,
+        'tags' => $tags,
+        'has_invalid_due' => $hasInvalidDue,
+    ];
+}
+
+function is_suspicious_public_record(array $row): bool
+{
+    $title = strtolower(trim((string) ($row['title'] ?? '')));
+    $desc = strtolower(trim((string) ($row['description'] ?? ($row['description_raw'] ?? ''))));
+    $contractNumber = trim((string) ($row['contract_number'] ?? ''));
+
+    $isObviousTest = (bool) preg_match('/\b(test|dummy|sample|lorem ipsum)\b/', $title)
+        && $contractNumber === ''
+        && ($desc === '' || (bool) preg_match('/\b(test|dummy|sample|placeholder)\b/', $desc));
+
+    $dateFields = ['posted_date', 'award_date', 'response_deadline', 'end_date'];
+    foreach ($dateFields as $field) {
+        $date = parse_public_date($row[$field] ?? null);
+        if ($date === null) {
+            continue;
+        }
+        $year = (int) $date->format('Y');
+        if ($year < 1990 || $year > 2100) {
+            return true;
+        }
+    }
+
+    return $isObviousTest;
+}
+
 function contract_effective_description(array $row): string
 {
     $candidates = [
@@ -135,9 +457,19 @@ function contract_effective_description(array $row): string
     ];
 
     foreach ($candidates as $candidate) {
-        $text = trim((string) $candidate);
-        if (!is_empty_display_value($text) && description_is_displayable_text($text)) {
-            return $text;
+        $raw = trim((string) $candidate);
+        if (is_empty_display_value($raw) || !description_is_displayable_text($raw)) {
+            continue;
+        }
+
+        $normalized = normalize_listing_description((string) ($row['source_type'] ?? 'unknown'), $raw, [
+            'set_aside_label' => $row['set_aside_label'] ?? null,
+            'source_record_id' => $row['source_record_id'] ?? null,
+        ]);
+        $display = trim((string) ($normalized['description_display'] ?? ''));
+
+        if (description_is_displayable_text($display)) {
+            return $display;
         }
     }
 
@@ -167,7 +499,12 @@ function is_empty_display_value($value): bool
         return true;
     }
 
-    static $junk = ['n/a', 'na', 'null', 'none', 'not available', 'not provided', 'unknown', '-', '--'];
+    static $junk = [
+        'n/a', 'na', 'null', 'none', 'not available', 'not provided', 'unknown', '-', '--',
+        'not listed', 'state not listed', 'date not listed', 'not specified',
+        'source notice unavailable', 'no summary provided', 'location not specified',
+        'no contact listed', 'no contact email listed', 'no contact phone listed', 'address not listed',
+    ];
     return in_array($text, $junk, true);
 }
 
@@ -226,12 +563,13 @@ function display_field_value(string $field, ?string $value): string
 
     $fallback = $fallbacks[$field] ?? 'Not provided';
 
-    $dateFields = ['posted_date', 'award_date', 'response_deadline', 'end_date'];
-    if (in_array($field, $dateFields, true)) {
-        return display_date($value, $fallback);
-    }
+    $sanitized = sanitize_public_field_value($field, $value);
+    return $sanitized === null ? $fallback : $sanitized;
+}
 
-    return display_text($value, $fallback);
+function display_field_or_null(string $field, ?string $value): ?string
+{
+    return sanitize_public_field_value($field, $value);
 }
 
 function display_contract_value(array $row, string $fallback = 'Not listed'): string
@@ -248,6 +586,40 @@ function display_contract_value(array $row, string $fallback = 'Not listed'): st
     }
 
     return $fallback;
+}
+
+function display_contract_value_or_null(array $row): ?string
+{
+    $value = display_contract_value($row, '');
+    return is_empty_display_value($value) ? null : $value;
+}
+
+function safe_external_url(?string $value): ?string
+{
+    $url = trim((string) $value);
+    if ($url === '' || is_empty_display_value($url)) {
+        return null;
+    }
+    if (!preg_match('~^https?://~i', $url)) {
+        return null;
+    }
+    if (!filter_var($url, FILTER_VALIDATE_URL)) {
+        return null;
+    }
+    return $url;
+}
+
+function join_display_parts(array $parts, string $separator = ' | '): string
+{
+    $filtered = [];
+    foreach ($parts as $part) {
+        $text = trim((string) $part);
+        if ($text === '' || is_empty_display_value($text)) {
+            continue;
+        }
+        $filtered[] = $text;
+    }
+    return implode($separator, $filtered);
 }
 
 function int_bool($value): int
@@ -293,31 +665,11 @@ function place_state_from_text(?string $value): ?string
 
 function derive_actionability(array $row): array
 {
-    $status = strtolower(trim((string) ($row['status'] ?? '')));
-    $notice = strtolower(trim((string) ($row['notice_type'] ?? '')));
-    $sourceType = strtolower(trim((string) ($row['source_type'] ?? '')));
-    $title = strtolower(trim((string) ($row['title'] ?? '')));
-    $desc = strtolower(trim((string) ($row['description'] ?? '')));
-    $text = $status . ' ' . $notice . ' ' . $sourceType . ' ' . $title . ' ' . $desc;
-    $dueDate = trim((string) ($row['response_deadline'] ?? ''));
-
-    $isEarly = (bool) preg_match('/rfi|request for information|sources sought|presolicitation|pre-solicitation|market research|forecast|industry day/', $text);
-    $isAwarded = (bool) preg_match('/award|awarded|historical|contract action/', $text) || $sourceType === 'usaspending' || $sourceType === 'sam_award';
-    $isOpenWord = (bool) preg_match('/open|active|solicitation|opportunity|combined synopsis|special notice/', $text);
-    $hasFutureDue = false;
-    $deadlineSoon = false;
-
-    if ($dueDate !== '') {
-        $now = new DateTime('today');
-        $due = DateTime::createFromFormat('Y-m-d', $dueDate) ?: null;
-        if ($due) {
-            $diffDays = (int) $now->diff($due)->format('%r%a');
-            $hasFutureDue = $diffDays >= 0;
-            $deadlineSoon = $diffDays >= 0 && $diffDays <= 7;
-        }
-    }
-
-    $isBiddable = !$isAwarded && ($hasFutureDue || $isOpenWord) && !$isEarly;
+    $state = derive_public_contract_state($row);
+    $isBiddable = $state['is_open_now'];
+    $isEarly = $state['is_early_signal'];
+    $isAwarded = $state['is_awarded'];
+    $deadlineSoon = $state['deadline_soon'];
     $hasContact = trim((string) ($row['contact_name'] ?? '')) !== ''
         || trim((string) ($row['contact_email'] ?? '')) !== ''
         || trim((string) ($row['contact_phone'] ?? '')) !== ''
@@ -488,8 +840,12 @@ function contract_search_query_parts(array $filters): array
     $mode = $filters['mode'] ?? '';
     if ($mode === 'open') {
         $where[] = 'cc.is_biddable_now = 1';
+        $where[] = '(cc.response_deadline IS NULL OR cc.response_deadline >= CURDATE())';
+        $where[] = 'cc.is_awarded = 0';
+        $where[] = 'cc.status NOT IN ("closed", "archived", "expired", "cancelled")';
     } elseif ($mode === 'signals') {
         $where[] = 'cc.is_upcoming_signal = 1';
+        $where[] = 'cc.is_awarded = 0';
     } elseif ($mode === 'awarded') {
         $where[] = 'cc.is_awarded = 1';
     }

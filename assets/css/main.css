@@ -325,12 +325,14 @@ textarea:focus {
 
 .listing-meta {
   margin: 0.2rem 0;
+  overflow-wrap: anywhere;
 }
 
 .listing-desc {
   margin: 0.38rem 0 0.5rem;
   color: #1e293b;
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .pager {
@@ -352,6 +354,36 @@ textarea:focus {
   margin: 0.28rem 0;
   font-size: 0.92rem;
   line-height: 1.3;
+}
+
+.home-listings-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.home-listings-left,
+.home-listings-right {
+  min-width: 0;
+}
+
+.home-adsense-block {
+  margin-top: 1rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid #e4ebf3;
+}
+
+.home-adsense-slot + .home-adsense-slot {
+  margin-top: 0.7rem;
+}
+
+.home-adsense-slot {
+  min-height: 90px;
+  border: 1px solid #e4ebf3;
+  border-radius: var(--radius-sm);
+  background: #fff;
+  padding: 0.35rem;
 }
 
 .landing-main {
@@ -407,6 +439,14 @@ textarea:focus {
   color: #0f172a;
 }
 
+.contract-details p,
+.contract-details a,
+.card p,
+code,
+pre {
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 980px) {
   .grid-2,
   .grid-3 {
@@ -420,6 +460,10 @@ textarea:focus {
   .table {
     display: block;
     overflow-x: auto;
+  }
+
+  .home-listings-layout {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -447,6 +491,80 @@ textarea:focus {
   }
 
   .landing-cta .btn {
+    width: 100%;
+  }
+}
+
+/* Responsive-only refinements below this point. */
+@media (max-width: 1199px) {
+  .filter-grid {
+    grid-template-columns: repeat(3, minmax(160px, 1fr));
+  }
+}
+
+@media (max-width: 991px) {
+  .filter-grid {
+    grid-template-columns: repeat(2, minmax(140px, 1fr));
+  }
+
+  .table th,
+  .table td {
+    min-width: 120px;
+  }
+
+  .listing-item,
+  .listing-meta,
+  .listing-desc,
+  .contract-details p,
+  .contract-details a,
+  .card p,
+  pre,
+  code {
+    overflow-wrap: anywhere;
+  }
+
+  img,
+  svg,
+  canvas,
+  video {
+    max-width: 100%;
+    height: auto;
+  }
+}
+
+@media (max-width: 767px) {
+  .search-form > * {
+    flex: 1 1 100%;
+  }
+
+  .search-form > .btn,
+  .search-form > button,
+  .filter-form .btn,
+  .pager .btn {
+    width: 100%;
+  }
+
+  .card {
+    padding: 0.86rem;
+  }
+
+  .listing-meta {
+    line-height: 1.4;
+  }
+}
+
+@media (max-width: 575px) {
+  .container {
+    width: min(1160px, 94vw);
+  }
+
+  .table th,
+  .table td {
+    font-size: 0.85rem;
+    padding: 0.5rem 0.45rem;
+  }
+
+  .btn {
     width: 100%;
   }
 }

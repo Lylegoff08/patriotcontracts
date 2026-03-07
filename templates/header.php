@@ -3,7 +3,7 @@ require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/auth.php';
 $config = app_config();
 $user = current_user();
-$baseUrl = rtrim((string) $config['app']['base_url'], '/');
+$baseUrl = app_base_url();
 $siteName = site_setting(db(), 'site_name', 'PatriotContracts');
 $isAdminUser = false;
 if ($user) {
@@ -27,22 +27,22 @@ $isActive = static function (array $pages) use ($currentPage): string {
 <body>
 <header class="site-header">
   <div class="container row">
-    <a class="brand" href="<?php echo e($baseUrl); ?>/index.php"><?php echo e($siteName); ?></a>
+    <a class="brand" href="<?php echo e(app_url('index.php')); ?>"><?php echo e($siteName); ?></a>
     <nav class="site-nav">
-      <a class="nav-link<?php echo $isActive(['home.php']); ?>" href="<?php echo e($baseUrl); ?>/home.php">Home</a>
-      <a class="nav-link<?php echo $isActive(['search.php']); ?>" href="<?php echo e($baseUrl); ?>/search.php">Search</a>
-      <a class="nav-link<?php echo $isActive(['stats.php']); ?>" href="<?php echo e($baseUrl); ?>/stats.php">Stats</a>
+      <a class="nav-link<?php echo $isActive(['home.php']); ?>" href="<?php echo e(app_url('home.php')); ?>">Browse Listings</a>
+      <a class="nav-link<?php echo $isActive(['search.php']); ?>" href="<?php echo e(app_url('search.php')); ?>">Search</a>
+      <a class="nav-link<?php echo $isActive(['stats.php']); ?>" href="<?php echo e(app_url('stats.php')); ?>">Stats</a>
       <?php if ($user): ?>
-        <a class="nav-link<?php echo $isActive(['dashboard.php']); ?>" href="<?php echo e($baseUrl); ?>/dashboard.php">Dashboard</a>
-        <a class="nav-link<?php echo $isActive(['account.php']); ?>" href="<?php echo e($baseUrl); ?>/account.php">Account</a>
+        <a class="nav-link<?php echo $isActive(['dashboard.php']); ?>" href="<?php echo e(app_url('dashboard.php')); ?>">Dashboard</a>
+        <a class="nav-link<?php echo $isActive(['account.php']); ?>" href="<?php echo e(app_url('account.php')); ?>">Account</a>
         <?php if ($isAdminUser): ?>
-          <a class="nav-link<?php echo $isActive(['dashboard.php']); ?>" href="<?php echo e($baseUrl); ?>/admin/dashboard.php">Admin CMS</a>
+          <a class="nav-link<?php echo $isActive(['dashboard.php']); ?>" href="<?php echo e(app_url('admin/dashboard.php')); ?>">Admin CMS</a>
         <?php endif; ?>
-        <a class="nav-link" href="<?php echo e($baseUrl); ?>/logout.php">Logout</a>
+        <a class="nav-link" href="<?php echo e(app_url('logout.php')); ?>">Logout</a>
       <?php else: ?>
-        <a class="nav-link<?php echo $isActive(['pricing.php']); ?>" href="<?php echo e($baseUrl); ?>/pricing.php">Pricing</a>
-        <a class="nav-link<?php echo $isActive(['login.php']); ?>" href="<?php echo e($baseUrl); ?>/login.php">Login</a>
-        <a class="nav-link<?php echo $isActive(['register.php']); ?>" href="<?php echo e($baseUrl); ?>/register.php">Register</a>
+        <a class="nav-link<?php echo $isActive(['pricing.php']); ?>" href="<?php echo e(app_url('pricing.php')); ?>">Pricing</a>
+        <a class="nav-link<?php echo $isActive(['login.php']); ?>" href="<?php echo e(app_url('login.php')); ?>">Sign In</a>
+        <a class="nav-link<?php echo $isActive(['register.php']); ?>" href="<?php echo e(app_url('register.php')); ?>">Create Account</a>
       <?php endif; ?>
     </nav>
   </div>

@@ -40,7 +40,7 @@ include __DIR__ . '/templates/header.php';
       <button class="btn" type="submit">Resend Verification Email</button>
     </form>
   <?php else: ?>
-    <p><a href="login.php">Login</a></p>
+    <p><a href="<?php echo e(app_url('login.php')); ?>">Login</a></p>
   <?php endif; ?>
 </section>
 <?php include __DIR__ . '/templates/footer.php'; ?>

@@ -9,6 +9,15 @@ if ($viewer && (string) ($viewer['account_status'] ?? '') === 'active') {
     $hasMemberStats = user_has_feature($pdo, (int) $viewer['id'], 'member_tools');
 }
 
+$coverage = $pdo->query('SELECT
+  COUNT(*) AS indexed_records,
+  COUNT(DISTINCT agency_id) AS agencies,
+  COUNT(DISTINCT vendor_id) AS vendors,
+  COUNT(DISTINCT category_id) AS categories,
+  MAX(posted_date) AS latest_posted
+  FROM contracts_clean
+  WHERE is_duplicate = 0')->fetch() ?: [];
+
 $categoryStats = $pdo->query('SELECT cat.name, COUNT(*) AS total, COALESCE(SUM(cc.award_amount),0) AS amount, COALESCE(AVG(NULLIF(cc.award_amount,0)),0) AS avg_amount
   FROM contracts_clean cc JOIN contract_categories cat ON cat.id = cc.category_id
   WHERE cc.is_duplicate = 0 GROUP BY cat.id ORDER BY total DESC')->fetchAll();
@@ -31,10 +40,10 @@ $locationStats = $pdo->query('SELECT place_state, COUNT(*) AS total, COALESCE(SU
   GROUP BY place_state ORDER BY total DESC LIMIT 25')->fetchAll();
 
 $pipeline = $pdo->query('SELECT
-  SUM(is_biddable_now = 1) AS open_now,
-  SUM(is_upcoming_signal = 1) AS early_signals,
+  SUM(is_biddable_now = 1 AND (response_deadline IS NULL OR response_deadline >= CURDATE()) AND is_awarded = 0 AND status NOT IN ("closed", "archived", "expired", "cancelled")) AS open_now,
+  SUM(is_upcoming_signal = 1 AND is_awarded = 0) AS early_signals,
   SUM(is_awarded = 1) AS recent_awards,
-  SUM(deadline_soon = 1) AS due_soon
+  SUM(deadline_soon = 1 AND response_deadline BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)) AS due_soon
   FROM contracts_clean WHERE is_duplicate = 0')->fetch();
 
 $setAside = $pdo->query('SELECT
@@ -59,10 +68,32 @@ $timeWindows = $pdo->query('SELECT
 include __DIR__ . '/templates/header.php';
 ?>
 <h1>Stats</h1>
+<p class="muted">Public metrics are derived from indexed procurement records and refreshed through ingestion cycles.</p>
+<div class="grid-2">
+  <section class="card">
+    <h2>Coverage Snapshot</h2>
+    <p>Indexed records: <strong><?php echo number_format((int) ($coverage['indexed_records'] ?? 0)); ?></strong></p>
+    <p>Agencies: <strong><?php echo number_format((int) ($coverage['agencies'] ?? 0)); ?></strong></p>
+    <p>Vendors: <strong><?php echo number_format((int) ($coverage['vendors'] ?? 0)); ?></strong></p>
+    <p>Categories: <strong><?php echo number_format((int) ($coverage['categories'] ?? 0)); ?></strong></p>
+    <?php if (($latest = display_field_or_null('posted_date', $coverage['latest_posted'] ?? null)) !== null): ?>
+      <p>Latest posted record date: <strong><?php echo e($latest); ?></strong></p>
+    <?php endif; ?>
+  </section>
+  <section class="card">
+    <h2>Public Pipeline Snapshot</h2>
+    <p>Open opportunities: <?php echo number_format((int) ($pipeline['open_now'] ?? 0)); ?></p>
+    <p>Early signals: <?php echo number_format((int) ($pipeline['early_signals'] ?? 0)); ?></p>
+    <p>Recent awards: <?php echo number_format((int) ($pipeline['recent_awards'] ?? 0)); ?></p>
+    <p>Due soon: <?php echo number_format((int) ($pipeline['due_soon'] ?? 0)); ?></p>
+    <p class="muted">Source families: SAM.gov, USAspending.gov, Grants.gov public records.</p>
+  </section>
+</div>
 <?php if (!$hasMemberStats): ?>
   <section class="card">
-    <p class="muted">Limited stats are visible to free users. Member feature unlocks full analytics tables.</p>
-    <p><a class="btn" href="pricing.php">Upgrade Membership</a></p>
+    <h2>Member Analytics Preview</h2>
+    <p class="muted">Free users can see coverage and pipeline snapshots. Member plans unlock full agency, category, location, and value analytics tables.</p>
+    <p><a class="btn" href="pricing.php">View Membership Plans</a></p>
   </section>
 <?php endif; ?>
 <?php if ($hasMemberStats): ?>
@@ -79,7 +110,7 @@ include __DIR__ . '/templates/header.php';
     <h2>Top Agencies by Count</h2>
     <table class="table"><thead><tr><th>Agency</th><th>Contracts</th><th>Amount</th></tr></thead><tbody>
       <?php foreach ($agencyByCount as $row): ?>
-      <tr><td><?php echo e($row['name']); ?></td><td><?php echo (int) $row['total']; ?></td><td>$<?php echo number_format((float) $row['amount'], 2); ?></td></tr>
+      <tr><td><?php echo e(display_field_value('agency', $row['name'] ?? null)); ?></td><td><?php echo (int) $row['total']; ?></td><td>$<?php echo number_format((float) $row['amount'], 2); ?></td></tr>
       <?php endforeach; ?>
     </tbody></table>
   </section>
@@ -89,7 +120,7 @@ include __DIR__ . '/templates/header.php';
     <h2>Top Agencies by Value</h2>
     <table class="table"><thead><tr><th>Agency</th><th>Contracts</th><th>Amount</th></tr></thead><tbody>
       <?php foreach ($agencyByValue as $row): ?>
-      <tr><td><?php echo e($row['name']); ?></td><td><?php echo (int) $row['total']; ?></td><td>$<?php echo number_format((float) $row['amount'], 2); ?></td></tr>
+      <tr><td><?php echo e(display_field_value('agency', $row['name'] ?? null)); ?></td><td><?php echo (int) $row['total']; ?></td><td>$<?php echo number_format((float) $row['amount'], 2); ?></td></tr>
       <?php endforeach; ?>
     </tbody></table>
   </section>
@@ -97,7 +128,7 @@ include __DIR__ . '/templates/header.php';
     <h2>Top Agencies by Recent Activity (30 Days)</h2>
     <table class="table"><thead><tr><th>Agency</th><th>Recent Contracts</th><th>Amount</th></tr></thead><tbody>
       <?php foreach ($agencyRecent as $row): ?>
-      <tr><td><?php echo e($row['name']); ?></td><td><?php echo (int) $row['total']; ?></td><td>$<?php echo number_format((float) $row['amount'], 2); ?></td></tr>
+      <tr><td><?php echo e(display_field_value('agency', $row['name'] ?? null)); ?></td><td><?php echo (int) $row['total']; ?></td><td>$<?php echo number_format((float) $row['amount'], 2); ?></td></tr>
       <?php endforeach; ?>
     </tbody></table>
   </section>
@@ -135,17 +166,32 @@ include __DIR__ . '/templates/header.php';
 <?php else: ?>
 <div class="grid-2">
   <section class="card">
-    <h2>Pipeline Stats</h2>
+    <h2>Pipeline Snapshot</h2>
     <p>Open opportunities: <?php echo number_format((int) ($pipeline['open_now'] ?? 0)); ?></p>
     <p>Early signals: <?php echo number_format((int) ($pipeline['early_signals'] ?? 0)); ?></p>
     <p>Recent awards: <?php echo number_format((int) ($pipeline['recent_awards'] ?? 0)); ?></p>
     <p>Due soon: <?php echo number_format((int) ($pipeline['due_soon'] ?? 0)); ?></p>
   </section>
   <section class="card">
-    <h2>Recent Time Windows</h2>
+    <h2>Recent Activity Windows</h2>
     <p>Last 7 days: <?php echo number_format((int) ($timeWindows['last_7_days'] ?? 0)); ?></p>
     <p>Last 30 days: <?php echo number_format((int) ($timeWindows['last_30_days'] ?? 0)); ?></p>
     <p class="muted">Member feature: full category, agency, location, and value analytics.</p>
+  </section>
+</div>
+<div class="grid-2">
+  <section class="card">
+    <h2>Top Categories (Public Preview)</h2>
+    <?php foreach (array_slice($categoryStats, 0, 5) as $row): ?>
+      <p><?php echo e((string) $row['name']); ?>: <?php echo number_format((int) $row['total']); ?></p>
+    <?php endforeach; ?>
+  </section>
+  <section class="card">
+    <h2>Top Agencies (Public Preview)</h2>
+    <?php foreach (array_slice($agencyByCount, 0, 5) as $row): ?>
+      <p><?php echo e(display_field_value('agency', $row['name'] ?? null)); ?>: <?php echo number_format((int) $row['total']); ?></p>
+    <?php endforeach; ?>
+    <p class="muted">Sign in with a member plan to view full ranked tables and value breakdowns.</p>
   </section>
 </div>
 <?php endif; ?>

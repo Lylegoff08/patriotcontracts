@@ -61,7 +61,7 @@ function require_login(): array
 {
     $user = current_user();
     if (!$user) {
-        $base = rtrim((string) (app_config()['app']['base_url'] ?? ''), '/');
+        $base = app_base_url();
         $next = urlencode((string) ($_SERVER['REQUEST_URI'] ?? ''));
         header('Location: ' . $base . '/login.php?next=' . $next);
         exit;
@@ -78,7 +78,7 @@ function require_active_member(): array
     }
 
     if (($user['account_status'] ?? '') !== 'active') {
-        $base = rtrim((string) (app_config()['app']['base_url'] ?? ''), '/');
+        $base = app_base_url();
         header('Location: ' . $base . '/pricing.php?upgrade=member');
         exit;
     }
@@ -89,7 +89,7 @@ function require_feature(string $featureCode): array
 {
     $user = require_active_member();
     if (!user_has_feature(db(), (int) $user['id'], $featureCode)) {
-        $base = rtrim((string) (app_config()['app']['base_url'] ?? ''), '/');
+        $base = app_base_url();
         header('Location: ' . $base . '/pricing.php?upgrade=' . urlencode($featureCode));
         exit;
     }
@@ -171,7 +171,7 @@ function send_user_verification_email(int $userId): bool
     }
 
     [$token] = generate_email_verification($userId);
-    $url = rtrim((string) app_config()['app']['base_url'], '/') . '/verify-email.php?token=' . urlencode($token);
+    $url = app_url('verify-email.php') . '?token=' . urlencode($token);
     return send_verification_email($email, $url);
 }
 
@@ -284,7 +284,7 @@ function create_password_reset(string $email): bool
         'token_hash' => $hash,
     ]);
 
-    $url = rtrim((string) app_config()['app']['base_url'], '/') . '/reset-password.php?token=' . urlencode($token);
+    $url = app_url('reset-password.php') . '?token=' . urlencode($token);
     send_password_reset_email($email, $url);
 
     return true;

@@ -10,9 +10,9 @@ include __DIR__ . '/../templates/header.php';
 <section class="card">
   <p>Stripe checkout completed. Membership activation is processed by webhook and may take a few seconds.</p>
   <?php if ($user): ?>
-    <p><a class="btn" href="<?php echo e(app_config()['app']['base_url']); ?>/dashboard.php">Go to Dashboard</a></p>
+    <p><a class="btn" href="<?php echo e(app_url('dashboard.php')); ?>">Go to Dashboard</a></p>
   <?php else: ?>
-    <p><a class="btn" href="<?php echo e(app_config()['app']['base_url']); ?>/login.php">Login</a></p>
+    <p><a class="btn" href="<?php echo e(app_url('login.php')); ?>">Login</a></p>
   <?php endif; ?>
 </section>
 <?php include __DIR__ . '/../templates/footer.php'; ?>

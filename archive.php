@@ -3,11 +3,12 @@ require_once __DIR__ . '/includes/functions.php';
 $pdo = db();
 $pageTitle = 'PatriotContracts | Archive';
 
-$stmt = $pdo->query("SELECT cc.id, COALESCE(NULLIF(lo.display_title, ''), NULLIF(go.display_title, ''), cc.title) AS title, cc.contract_number, cc.response_deadline, cc.end_date, cc.award_date, cc.posted_date, cc.status, cc.award_amount,
+$stmt = $pdo->query("SELECT cc.id, COALESCE(NULLIF(lo.display_title, ''), NULLIF(go.display_title, ''), cc.title) AS title, cc.contract_number, cc.response_deadline, cc.end_date, cc.award_date, cc.posted_date, cc.status, cc.award_amount, cc.source_type, COALESCE(NULLIF(cc.source_name, ''), s.name) AS source_name,
     a.name AS agency_name, v.name AS vendor_name, COALESCE(ocat.name, cat.name) AS category_name
     FROM contracts_clean cc
     LEFT JOIN listing_overrides lo ON lo.contract_id = cc.id
     LEFT JOIN grant_overrides go ON go.contract_id = cc.id
+    LEFT JOIN sources s ON s.id = cc.source_id
     LEFT JOIN agencies a ON a.id = cc.agency_id
     LEFT JOIN vendors v ON v.id = cc.vendor_id
     LEFT JOIN contract_categories cat ON cat.id = cc.category_id
@@ -33,10 +34,30 @@ include __DIR__ . '/templates/header.php';
   <p>No archived contracts found.</p>
 <?php endif; ?>
 <?php foreach ($rows as $row): ?>
+  <?php if (is_suspicious_public_record($row)) { continue; } ?>
+  <?php $state = derive_public_contract_state($row); ?>
+  <?php if (!$state['is_archived'] && !$state['is_awarded']) { continue; } ?>
+  <?php
+    $metaTop = join_display_parts([
+      display_field_or_null('agency', $row['agency_name'] ?? null),
+      display_field_or_null('vendor', $row['vendor_name'] ?? null),
+      display_field_or_null('category', $row['category_name'] ?? null),
+      display_field_or_null('source_name', $row['source_name'] ?? null),
+    ]);
+    $metaBottom = join_display_parts([
+      display_field_or_null('contract_number', $row['contract_number'] ?? null),
+      display_contract_value_or_null($row),
+      ($due = display_field_or_null('response_deadline', $row['response_deadline'] ?? null)) ? 'Due ' . $due : '',
+      ($end = display_field_or_null('end_date', $row['end_date'] ?? null)) ? 'End ' . $end : '',
+      ($award = display_field_or_null('award_date', $row['award_date'] ?? null)) ? 'Award ' . $award : '',
+      ($posted = display_field_or_null('posted_date', $row['posted_date'] ?? null)) ? 'Posted ' . $posted : '',
+      display_field_or_null('status', $row['status'] ?? null),
+    ]);
+  ?>
   <article>
-    <h3><a href="contract.php?id=<?php echo (int) $row['id']; ?>"><?php echo e(display_field_value('title', $row['title'] ?? null)); ?></a></h3>
-    <p class="muted"><?php echo e(display_field_value('agency', $row['agency_name'] ?? null)); ?> | <?php echo e(display_field_value('vendor', $row['vendor_name'] ?? null)); ?> | <?php echo e(display_field_value('category', $row['category_name'] ?? null)); ?></p>
-    <p class="muted">#<?php echo e(display_field_value('contract_number', $row['contract_number'] ?? null)); ?> | <?php echo e(display_contract_value($row, display_field_value('award_value', null))); ?> | Due <?php echo e(display_field_value('response_deadline', $row['response_deadline'] ?? null)); ?> | End <?php echo e(display_field_value('end_date', $row['end_date'] ?? null)); ?> | Award <?php echo e(display_field_value('award_date', $row['award_date'] ?? null)); ?> | Posted <?php echo e(display_field_value('posted_date', $row['posted_date'] ?? null)); ?> | <?php echo e(display_field_value('status', $row['status'] ?? null)); ?></p>
+    <h3><a href="<?php echo e(app_url('contract.php?id=' . (int) $row['id'])); ?>"><?php echo e(display_field_value('title', $row['title'] ?? null)); ?></a></h3>
+    <?php if ($metaTop !== ''): ?><p class="muted"><?php echo e($metaTop); ?></p><?php endif; ?>
+    <?php if ($metaBottom !== ''): ?><p class="muted"><?php echo e($metaBottom); ?></p><?php endif; ?>
   </article>
   <hr>
 <?php endforeach; ?>

@@ -46,7 +46,7 @@ mark_user_logged_in((int) $user['id']);
 $subscription = fetch_active_subscription_for_user(db(), (int) $user['id']);
 if ($subscription) {
     set_user_account_status_from_subscription(db(), (int) $user['id']);
-    header('Location: ../../dashboard.php');
+    header('Location: ' . app_url('dashboard.php'));
     exit;
 }
 
@@ -57,5 +57,6 @@ if (!in_array($plan, membership_plan_codes(), true)) {
 }
 
 $session = create_checkout_session(db(), (int) $user['id'], $plan);
-header('Location: ' . (string) ($session['url'] ?? '../../pricing.php'));
+$checkoutUrl = (string) ($session['url'] ?? '');
+header('Location: ' . ($checkoutUrl !== '' ? $checkoutUrl : app_url('pricing.php')));
 exit;
