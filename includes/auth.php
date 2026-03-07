@@ -72,6 +72,11 @@ function require_login(): array
 function require_active_member(): array
 {
     $user = require_login();
+    $role = strtolower(trim((string) ($user['role'] ?? '')));
+    if (in_array($role, ['admin', 'super_admin'], true)) {
+        return $user;
+    }
+
     if (($user['account_status'] ?? '') !== 'active') {
         $base = rtrim((string) (app_config()['app']['base_url'] ?? ''), '/');
         header('Location: ' . $base . '/pricing.php?upgrade=member');

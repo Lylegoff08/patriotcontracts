@@ -6,6 +6,12 @@ $config = app_config();
 $baseUrl = rtrim((string) ($config['app']['base_url'] ?? ''), '/');
 $user = current_user();
 $pageTitle = 'PatriotContracts | Government Contract Discovery';
+$pdo = db();
+$siteName = site_setting($pdo, 'site_name', 'PatriotContracts');
+$tagline = site_setting($pdo, 'tagline', 'Federal contract discovery and monitoring');
+$heroTitle = site_setting($pdo, 'homepage_hero_title', 'Find government contract opportunities faster.');
+$heroSubtitle = site_setting($pdo, 'homepage_hero_subtitle', 'PatriotContracts helps contractors, analysts, and procurement researchers discover and review U.S. government opportunities in a cleaner, structured interface.');
+$pricingCtaText = site_setting($pdo, 'pricing_cta_text', 'Buy Subscription');
 
 ?>
 <!doctype html>
@@ -20,7 +26,7 @@ $pageTitle = 'PatriotContracts | Government Contract Discovery';
 <body>
 <header class="site-header">
   <div class="container row">
-    <a class="brand" href="<?php echo e($baseUrl); ?>/index.php">PatriotContracts</a>
+    <a class="brand" href="<?php echo e($baseUrl); ?>/index.php"><?php echo e($siteName); ?></a>
     <nav class="site-nav">
       <a class="nav-link" href="<?php echo e($baseUrl); ?>/home.php">Browse Listings</a>
       <a class="nav-link" href="<?php echo e($baseUrl); ?>/search.php">Search</a>
@@ -36,14 +42,12 @@ $pageTitle = 'PatriotContracts | Government Contract Discovery';
 
 <main class="container landing-main">
   <section class="landing-hero card">
-    <p class="landing-kicker">PatriotContracts</p>
-    <h1>Find government contract opportunities faster.</h1>
-    <p class="landing-summary">
-      PatriotContracts helps contractors, analysts, and procurement researchers discover and review U.S. government opportunities in a cleaner, structured interface.
-    </p>
+    <p class="landing-kicker"><?php echo e($siteName); ?></p>
+    <h1><?php echo e($heroTitle); ?></h1>
+    <p class="landing-summary"><?php echo e($heroSubtitle); ?></p>
     <div class="landing-cta">
       <a class="btn btn-lg" href="<?php echo e($baseUrl); ?>/home.php">Browse Listings</a>
-      <a class="btn btn-secondary btn-lg" href="<?php echo e($baseUrl); ?>/pricing.php">Buy Subscription</a>
+      <a class="btn btn-secondary btn-lg" href="<?php echo e($baseUrl); ?>/pricing.php"><?php echo e($pricingCtaText); ?></a>
     </div>
   </section>
 
@@ -94,7 +98,7 @@ $pageTitle = 'PatriotContracts | Government Contract Discovery';
 
 <footer class="site-footer">
   <div class="container">
-    <small>PatriotContracts aggregates public U.S. procurement data for research and opportunity discovery.</small>
+    <small><?php echo e($tagline); ?></small>
   </div>
 </footer>
 <script src="<?php echo e($baseUrl); ?>/assets/js/app.js"></script>

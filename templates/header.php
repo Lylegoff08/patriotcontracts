@@ -4,6 +4,12 @@ require_once __DIR__ . '/../includes/auth.php';
 $config = app_config();
 $user = current_user();
 $baseUrl = rtrim((string) $config['app']['base_url'], '/');
+$siteName = site_setting(db(), 'site_name', 'PatriotContracts');
+$isAdminUser = false;
+if ($user) {
+    $userRole = strtolower(trim((string) ($user['role'] ?? '')));
+    $isAdminUser = in_array($userRole, ['admin', 'super_admin'], true);
+}
 $currentPage = basename((string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH));
 $isActive = static function (array $pages) use ($currentPage): string {
     return in_array($currentPage, $pages, true) ? ' is-active' : '';
@@ -21,7 +27,7 @@ $isActive = static function (array $pages) use ($currentPage): string {
 <body>
 <header class="site-header">
   <div class="container row">
-    <a class="brand" href="<?php echo e($baseUrl); ?>/index.php">PatriotContracts</a>
+    <a class="brand" href="<?php echo e($baseUrl); ?>/index.php"><?php echo e($siteName); ?></a>
     <nav class="site-nav">
       <a class="nav-link<?php echo $isActive(['home.php']); ?>" href="<?php echo e($baseUrl); ?>/home.php">Home</a>
       <a class="nav-link<?php echo $isActive(['search.php']); ?>" href="<?php echo e($baseUrl); ?>/search.php">Search</a>
@@ -29,6 +35,9 @@ $isActive = static function (array $pages) use ($currentPage): string {
       <?php if ($user): ?>
         <a class="nav-link<?php echo $isActive(['dashboard.php']); ?>" href="<?php echo e($baseUrl); ?>/dashboard.php">Dashboard</a>
         <a class="nav-link<?php echo $isActive(['account.php']); ?>" href="<?php echo e($baseUrl); ?>/account.php">Account</a>
+        <?php if ($isAdminUser): ?>
+          <a class="nav-link<?php echo $isActive(['dashboard.php']); ?>" href="<?php echo e($baseUrl); ?>/admin/dashboard.php">Admin CMS</a>
+        <?php endif; ?>
         <a class="nav-link" href="<?php echo e($baseUrl); ?>/logout.php">Logout</a>
       <?php else: ?>
         <a class="nav-link<?php echo $isActive(['pricing.php']); ?>" href="<?php echo e($baseUrl); ?>/pricing.php">Pricing</a>

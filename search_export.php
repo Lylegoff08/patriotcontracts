@@ -14,14 +14,19 @@ $filters = build_contract_search_filters();
 
 $limit = min(2000, max(1, request_int('limit', 1000)));
 
-$sql = 'SELECT cc.id, cc.title, cc.contract_number, a.name AS agency_name, v.name AS vendor_name, cat.name AS category_name,
+$sql = 'SELECT cc.id,
+    COALESCE(NULLIF(lo.display_title, ""), NULLIF(go.display_title, ""), cc.title) AS title,
+    cc.contract_number, a.name AS agency_name, v.name AS vendor_name, COALESCE(ocat.name, cat.name) AS category_name,
     cc.status, cc.notice_type, cc.posted_date, cc.award_date, cc.response_deadline, cc.place_of_performance, cc.place_state,
     cc.award_amount, cc.value_min, cc.value_max, cc.naics_code, cc.psc_code, cc.set_aside_label, cc.contact_name, cc.contact_email, cc.contact_phone,
     cc.source_name, cc.source_url
     FROM contracts_clean cc
+    LEFT JOIN listing_overrides lo ON lo.contract_id = cc.id
+    LEFT JOIN grant_overrides go ON go.contract_id = cc.id
     LEFT JOIN agencies a ON a.id = cc.agency_id
     LEFT JOIN vendors v ON v.id = cc.vendor_id
     LEFT JOIN contract_categories cat ON cat.id = cc.category_id
+    LEFT JOIN contract_categories ocat ON ocat.id = COALESCE(lo.category_override, go.category_override)
     WHERE ' . implode(' AND ', $where) . '
     ORDER BY cc.posted_date DESC, cc.id DESC
     LIMIT :limit';

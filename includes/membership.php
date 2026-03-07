@@ -94,6 +94,17 @@ function user_feature_flags(PDO $pdo, int $userId): array
 
 function user_has_feature(PDO $pdo, int $userId, string $feature): bool
 {
+    static $adminCache = [];
+    if (!array_key_exists($userId, $adminCache)) {
+        $roleStmt = $pdo->prepare('SELECT role FROM users WHERE id = :id LIMIT 1');
+        $roleStmt->execute(['id' => $userId]);
+        $role = strtolower(trim((string) ($roleStmt->fetchColumn() ?: '')));
+        $adminCache[$userId] = in_array($role, ['admin', 'super_admin'], true);
+    }
+    if ($adminCache[$userId]) {
+        return true;
+    }
+
     $flags = user_feature_flags($pdo, $userId);
     return !empty($flags[$feature]);
 }

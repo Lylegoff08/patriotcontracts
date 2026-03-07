@@ -40,14 +40,20 @@ if ($page > $totalPages) {
     [, , $offset] = paginate($page, $perPage);
 }
 
-$sql = 'SELECT cc.id, cc.title, cc.description, cc.contract_number, cc.award_amount, cc.value_min, cc.value_max, cc.posted_date, cc.award_date,
+$sql = 'SELECT cc.id,
+    COALESCE(NULLIF(lo.display_title, ""), NULLIF(go.display_title, ""), cc.title) AS title,
+    COALESCE(NULLIF(lo.display_summary, ""), NULLIF(go.display_summary, ""), cc.description) AS description,
+    cc.contract_number, cc.award_amount, cc.value_min, cc.value_max, cc.posted_date, cc.award_date,
     cc.response_deadline, cc.status, cc.naics_code, cc.psc_code, cc.contact_name, cc.contracting_office, cc.place_of_performance, cc.place_state,
     cc.set_aside_label, cc.notice_type, cc.is_biddable_now, cc.is_upcoming_signal, cc.is_awarded, cc.deadline_soon,
-    a.name AS agency_name, v.name AS vendor_name, cat.name AS category_name
+    a.name AS agency_name, v.name AS vendor_name, COALESCE(ocat.name, cat.name) AS category_name
     FROM contracts_clean cc
+    LEFT JOIN listing_overrides lo ON lo.contract_id = cc.id
+    LEFT JOIN grant_overrides go ON go.contract_id = cc.id
     LEFT JOIN agencies a ON a.id = cc.agency_id
     LEFT JOIN vendors v ON v.id = cc.vendor_id
     LEFT JOIN contract_categories cat ON cat.id = cc.category_id
+    LEFT JOIN contract_categories ocat ON ocat.id = COALESCE(lo.category_override, go.category_override)
     WHERE ' . implode(' AND ', $where) . '
     ORDER BY cc.posted_date DESC, cc.id DESC
     LIMIT :limit OFFSET :offset';
@@ -64,7 +70,14 @@ $rows = $stmt->fetchAll();
 $categories = $pdo->query('SELECT slug, name FROM contract_categories ORDER BY name')->fetchAll();
 $agencies = $pdo->query('SELECT id, name FROM agencies ORDER BY name LIMIT 500')->fetchAll();
 $vendors = $pdo->query('SELECT id, name FROM vendors ORDER BY name LIMIT 500')->fetchAll();
-$setAsides = $pdo->query('SELECT DISTINCT set_aside_label FROM contracts_clean WHERE set_aside_label IS NOT NULL AND set_aside_label <> "" ORDER BY set_aside_label LIMIT 200')->fetchAll(PDO::FETCH_COLUMN);
+$setAsides = $pdo->query('SELECT DISTINCT cc.set_aside_label
+    FROM contracts_clean cc
+    WHERE cc.set_aside_label IS NOT NULL
+      AND cc.set_aside_label <> ""
+      AND NOT EXISTS (SELECT 1 FROM listing_overrides loh WHERE loh.contract_id = cc.id AND loh.is_hidden = 1)
+      AND NOT EXISTS (SELECT 1 FROM grant_overrides goh WHERE goh.contract_id = cc.id AND goh.is_hidden = 1)
+    ORDER BY cc.set_aside_label
+    LIMIT 200')->fetchAll(PDO::FETCH_COLUMN);
 
 $baseQuery = $_GET;
 unset($baseQuery['page']);

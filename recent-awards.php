@@ -3,13 +3,17 @@ require_once __DIR__ . '/includes/functions.php';
 $pdo = db();
 $pageTitle = 'PatriotContracts | Recent Awards';
 
-$stmt = $pdo->query('SELECT cc.id, cc.title, cc.contract_number, cc.award_amount, cc.award_date, cc.posted_date, cc.status,
-    a.name AS agency_name, v.name AS vendor_name, cat.name AS category_name
+$stmt = $pdo->query('SELECT cc.id, COALESCE(NULLIF(lo.display_title, ""), NULLIF(go.display_title, ""), cc.title) AS title, cc.contract_number, cc.award_amount, cc.award_date, cc.posted_date, cc.status,
+    a.name AS agency_name, v.name AS vendor_name, COALESCE(ocat.name, cat.name) AS category_name
     FROM contracts_clean cc
+    LEFT JOIN listing_overrides lo ON lo.contract_id = cc.id
+    LEFT JOIN grant_overrides go ON go.contract_id = cc.id
     LEFT JOIN agencies a ON a.id = cc.agency_id
     LEFT JOIN vendors v ON v.id = cc.vendor_id
     LEFT JOIN contract_categories cat ON cat.id = cc.category_id
+    LEFT JOIN contract_categories ocat ON ocat.id = COALESCE(lo.category_override, go.category_override)
     WHERE cc.is_duplicate = 0
+      AND COALESCE(lo.is_hidden, go.is_hidden, 0) = 0
       AND cc.is_awarded = 1
       AND COALESCE(cc.award_date, cc.posted_date) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
     ORDER BY COALESCE(cc.award_date, cc.posted_date) DESC, cc.id DESC

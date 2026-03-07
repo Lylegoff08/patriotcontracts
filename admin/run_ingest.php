@@ -1,6 +1,7 @@
-﻿<?php
+<?php
+require_once __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/includes/permissions.php';
 require_once __DIR__ . '/../includes/functions.php';
-require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../ingest/ingest_usaspending.php';
 require_once __DIR__ . '/../ingest/ingest_sam_opportunities.php';
 require_once __DIR__ . '/../ingest/ingest_sam_awards.php';
@@ -12,10 +13,9 @@ if (file_exists(__DIR__ . '/../ingest/ingest_grants.php')) {
     require_once __DIR__ . '/../ingest/ingest_grants.php';
 }
 
-$user = current_user();
-if (!$user || $user['role'] !== 'admin') {
-    http_response_code(403);
-    die('Admin access required');
+$adminUser = require_admin_auth_json(['admin', 'super_admin']);
+if (!admin_can_run_ingestion($adminUser)) {
+    admin_json_denied();
 }
 
 $pdo = db();
@@ -48,6 +48,15 @@ if ($runStats) {
 if ($runAlerts) {
     $results['alerts'] = run_alerts($pdo);
 }
+
+admin_log_activity($pdo, (int) $adminUser['id'], 'ingest_pipeline_run', 'ingest', null, [
+    'run_source' => $runSource,
+    'run_normalize' => $runNormalize,
+    'run_recategorize' => $runRecategorize,
+    'run_stats' => $runStats,
+    'run_alerts' => $runAlerts,
+    'results' => $results,
+]);
 
 header('Content-Type: application/json');
 echo json_encode($results, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);

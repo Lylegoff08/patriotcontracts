@@ -1,0 +1,158 @@
+.admin-body {
+  margin: 0;
+  background: #f6f8fb;
+}
+
+.admin-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.admin-sidebar {
+  width: 240px;
+  background: #162030;
+  color: #fff;
+  padding: 1rem;
+  box-sizing: border-box;
+}
+
+.admin-brand {
+  color: #fff;
+  text-decoration: none;
+  font-weight: 700;
+  display: block;
+  margin-bottom: 1rem;
+}
+
+.admin-sidebar nav a {
+  display: block;
+  color: #d7deea;
+  text-decoration: none;
+  padding: 0.45rem 0.55rem;
+  border-radius: 4px;
+  margin-bottom: 0.2rem;
+}
+
+.admin-sidebar nav a:hover,
+.admin-sidebar nav a.is-active {
+  background: #243247;
+  color: #fff;
+}
+
+.admin-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-topbar {
+  background: #fff;
+  border-bottom: 1px solid #e3e8f1;
+  padding: 0.85rem 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.admin-content {
+  padding: 1rem;
+}
+
+.admin-grid-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 0.7rem;
+  margin-bottom: 1rem;
+}
+
+.admin-card {
+  background: #fff;
+  border: 1px solid #e2e7f0;
+  border-radius: 8px;
+  padding: 0.8rem;
+}
+
+.admin-card h3,
+.admin-card p {
+  margin: 0;
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+.admin-table th,
+.admin-table td {
+  border-bottom: 1px solid #ecf0f5;
+  padding: 0.5rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.admin-form-inline {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+  margin: 0;
+}
+
+.admin-form-inline input[type="text"],
+.admin-form-inline select,
+.admin-form-inline textarea,
+.admin-form-block input[type="text"],
+.admin-form-block input[type="email"],
+.admin-form-block input[type="password"],
+.admin-form-block textarea,
+.admin-form-block select {
+  border: 1px solid #cfd8e6;
+  border-radius: 4px;
+  padding: 0.42rem 0.5rem;
+}
+
+.admin-form-block label {
+  display: block;
+  margin-bottom: 0.55rem;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+}
+
+.badge-ok {
+  background: #dbf5e5;
+  color: #0b5f2e;
+}
+
+.badge-warn {
+  background: #fff2cc;
+  color: #735b00;
+}
+
+.badge-danger {
+  background: #ffd9d9;
+  color: #7a1919;
+}
+
+.admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+@media (max-width: 900px) {
+  .admin-shell {
+    flex-direction: column;
+  }
+
+  .admin-sidebar {
+    width: 100%;
+  }
+}

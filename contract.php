@@ -3,23 +3,35 @@ require_once __DIR__ . '/includes/functions.php';
 $pdo = db();
 $id = request_int('id', 0);
 
-$stmt = $pdo->prepare('SELECT cc.*, COALESCE(NULLIF(cc.source_name, ""), s.name) AS source_name_resolved, a.name AS agency_name, v.name AS vendor_name, cat.name AS category_name, cat.slug AS category_slug
+$stmt = $pdo->prepare('SELECT cc.*,
+    COALESCE(NULLIF(lo.display_title, ""), NULLIF(go.display_title, ""), cc.title) AS display_title_effective,
+    COALESCE(NULLIF(lo.display_summary, ""), NULLIF(go.display_summary, ""), cc.description) AS display_summary_effective,
+    COALESCE(NULLIF(cc.source_name, ""), s.name) AS source_name_resolved,
+    a.name AS agency_name,
+    v.name AS vendor_name,
+    COALESCE(ocat.name, cat.name) AS category_name,
+    COALESCE(ocat.slug, cat.slug) AS category_slug
     FROM contracts_clean cc
+    LEFT JOIN listing_overrides lo ON lo.contract_id = cc.id
+    LEFT JOIN grant_overrides go ON go.contract_id = cc.id
     LEFT JOIN sources s ON s.id = cc.source_id
     LEFT JOIN agencies a ON a.id = cc.agency_id
     LEFT JOIN vendors v ON v.id = cc.vendor_id
     LEFT JOIN contract_categories cat ON cat.id = cc.category_id
-    WHERE cc.id = :id LIMIT 1');
+    LEFT JOIN contract_categories ocat ON ocat.id = COALESCE(lo.category_override, go.category_override)
+    WHERE cc.id = :id
+      AND COALESCE(lo.is_hidden, go.is_hidden, 0) = 0
+    LIMIT 1');
 $stmt->execute(['id' => $id]);
 $contract = $stmt->fetch();
-$pageTitle = $contract ? 'PatriotContracts | ' . $contract['title'] : 'PatriotContracts | Contract';
+$pageTitle = $contract ? 'PatriotContracts | ' . ($contract['display_title_effective'] ?? $contract['title']) : 'PatriotContracts | Contract';
 
 include __DIR__ . '/templates/header.php';
 ?>
 <?php if (!$contract): ?>
   <h1>Contract not found</h1>
 <?php else: ?>
-  <h1><?php echo e(display_field_value('title', $contract['title'] ?? null)); ?></h1>
+  <h1><?php echo e(display_field_value('title', $contract['display_title_effective'] ?? $contract['title'] ?? null)); ?></h1>
   <section class="card contract-details">
     <p><strong>Agency:</strong>
       <?php if ((int) ($contract['agency_id'] ?? 0) > 0): ?>
@@ -57,7 +69,7 @@ include __DIR__ . '/templates/header.php';
       <?php if ((int) $contract['deadline_soon'] === 1): ?>| Deadline Soon <?php endif; ?>
     </p>
     <p><strong>Place of Performance:</strong> <?php echo e(display_field_value('place_of_performance', $contract['place_of_performance'] ?? null)); ?> (<?php echo e(display_field_value('place_state', $contract['place_state'] ?? null)); ?>)</p>
-    <p><strong>Description:</strong> <?php echo nl2br(e(display_field_value('description', $contract['description'] ?? null))); ?></p>
+    <p><strong>Description:</strong> <?php echo nl2br(e(display_field_value('description', $contract['display_summary_effective'] ?? $contract['description'] ?? null))); ?></p>
     <h3>Public Contact Information</h3>
     <p><strong>Name:</strong> <?php echo e(display_field_value('contact_name', $contract['contact_name'] ?? null)); ?></p>
     <p><strong>Email:</strong> <?php echo e(display_field_value('contact_email', $contract['contact_email'] ?? null)); ?></p>

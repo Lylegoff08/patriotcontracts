@@ -53,6 +53,7 @@ function api_authenticate(PDO $pdo, string $endpoint): ?array
     $hash = api_key_hash($rawKey);
     $stmt = $pdo->prepare('SELECT k.id, k.user_id, k.daily_limit, k.status,
             u.account_status, u.is_active,
+            u.role,
             p.plan_code, COALESCE(p.api_daily_limit, k.daily_limit) AS effective_limit,
             s.status AS subscription_status
         FROM api_keys k
@@ -73,12 +74,16 @@ function api_authenticate(PDO $pdo, string $endpoint): ?array
         json_response(['error' => 'Inactive account'], 403);
     }
 
-    if ((string) ($row['subscription_status'] ?? '') !== 'active' && (string) ($row['subscription_status'] ?? '') !== 'trialing') {
-        json_response(['error' => 'Inactive membership'], 403);
-    }
+    $role = strtolower(trim((string) ($row['role'] ?? '')));
+    $isAdmin = in_array($role, ['admin', 'super_admin'], true);
+    if (!$isAdmin) {
+        if ((string) ($row['subscription_status'] ?? '') !== 'active' && (string) ($row['subscription_status'] ?? '') !== 'trialing') {
+            json_response(['error' => 'Inactive membership'], 403);
+        }
 
-    if (strtoupper((string) ($row['plan_code'] ?? '')) !== 'API_MEMBER') {
-        json_response(['error' => 'API membership required'], 403);
+        if (strtoupper((string) ($row['plan_code'] ?? '')) !== 'API_MEMBER') {
+            json_response(['error' => 'API membership required'], 403);
+        }
     }
 
     $usedToday = api_usage_count_today($pdo, (int) $row['id']);

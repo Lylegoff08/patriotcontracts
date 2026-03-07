@@ -1,12 +1,8 @@
 <?php
-require_once __DIR__ . '/../includes/functions.php';
-require_once __DIR__ . '/../includes/auth.php';
-$user = current_user();
-if (!$user || $user['role'] !== 'admin') {
-    http_response_code(403);
-    die('Admin access required');
-}
+require_once __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/includes/permissions.php';
 
+$adminUser = require_admin_auth(['admin', 'super_admin']);
 $pdo = db();
 $sources = $pdo->query('SELECT id, name, slug FROM sources ORDER BY name')->fetchAll();
 $unprocessedRaw = (int) $pdo->query('SELECT COUNT(*) FROM contracts_raw WHERE processed = 0')->fetchColumn();
@@ -18,7 +14,8 @@ $apiUsage24h = (int) $pdo->query('SELECT COUNT(*) FROM api_usage WHERE requested
 $recentApiKeys = $pdo->query('SELECT api_key_prefix, status, created_at FROM api_keys ORDER BY id DESC LIMIT 10')->fetchAll();
 $webhookIssues = $pdo->query('SELECT event_type, created_at FROM webhook_events WHERE processed_at IS NULL ORDER BY id DESC LIMIT 20')->fetchAll();
 
-include __DIR__ . '/../templates/header.php';
+$adminTitle = 'Health';
+include __DIR__ . '/includes/admin_header.php';
 ?>
 <h1>Ingest Health</h1>
 <section class="card">
@@ -33,6 +30,7 @@ include __DIR__ . '/../templates/header.php';
   <p>Unprocessed raw backlog: <?php echo number_format($unprocessedRaw); ?></p>
   <p>Duplicate-marked records: <?php echo number_format($duplicateCount); ?></p>
 </section>
+
 <section class="card">
   <h2>Membership / API Snapshot</h2>
   <p>Users: <?php echo number_format($usersCount); ?></p>
@@ -40,12 +38,14 @@ include __DIR__ . '/../templates/header.php';
   <p>Pending email verifications: <?php echo number_format($pendingEmailVerifications); ?></p>
   <p>API requests (24h): <?php echo number_format($apiUsage24h); ?></p>
 </section>
+
 <section class="card">
   <h2>Recent API Keys</h2>
   <?php foreach ($recentApiKeys as $k): ?>
     <p><code><?php echo e((string) $k['api_key_prefix']); ?>...</code> | <?php echo e((string) $k['status']); ?> | <?php echo e((string) $k['created_at']); ?></p>
   <?php endforeach; ?>
 </section>
+
 <section class="card">
   <h2>Webhook Issues</h2>
   <?php if (!$webhookIssues): ?>
@@ -57,9 +57,9 @@ include __DIR__ . '/../templates/header.php';
   <?php endif; ?>
 </section>
 
-<section class="card">
+<section class="card admin-table-wrap">
   <h2>Source Status</h2>
-  <table class="table">
+  <table class="admin-table">
     <thead><tr><th>Source</th><th>Last Success</th><th>Last Failure</th><th>Last Run Records</th><th>Status</th></tr></thead>
     <tbody>
     <?php foreach ($sources as $source): ?>
@@ -88,10 +88,10 @@ include __DIR__ . '/../templates/header.php';
             -
           <?php endif; ?>
         </td>
-        <td><?php echo e($status); ?></td>
+        <td><span class="<?php echo e(admin_status_badge_class($status)); ?>"><?php echo e($status); ?></span></td>
       </tr>
     <?php endforeach; ?>
     </tbody>
   </table>
 </section>
-<?php include __DIR__ . '/../templates/footer.php'; ?>
+<?php include __DIR__ . '/includes/admin_footer.php'; ?>

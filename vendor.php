@@ -9,7 +9,15 @@ $vendor = $vendorStmt->fetch();
 
 $list = [];
 if ($vendor) {
-    $stmt = $pdo->prepare('SELECT id, title, posted_date, award_amount FROM contracts_clean WHERE vendor_id = :vendor_id AND is_duplicate = 0 ORDER BY posted_date DESC LIMIT 100');
+    $stmt = $pdo->prepare('SELECT cc.id, COALESCE(NULLIF(lo.display_title, ""), NULLIF(go.display_title, ""), cc.title) AS title, cc.posted_date, cc.award_amount
+        FROM contracts_clean cc
+        LEFT JOIN listing_overrides lo ON lo.contract_id = cc.id
+        LEFT JOIN grant_overrides go ON go.contract_id = cc.id
+        WHERE cc.vendor_id = :vendor_id
+          AND cc.is_duplicate = 0
+          AND COALESCE(lo.is_hidden, go.is_hidden, 0) = 0
+        ORDER BY cc.posted_date DESC
+        LIMIT 100');
     $stmt->execute(['vendor_id' => $id]);
     $list = $stmt->fetchAll();
 }

@@ -97,6 +97,25 @@ function table_counts(PDO $pdo): array
     return $out;
 }
 
+function site_setting(PDO $pdo, string $key, string $default = ''): string
+{
+    static $cache = [];
+    if (array_key_exists($key, $cache)) {
+        return $cache[$key];
+    }
+
+    try {
+        $stmt = $pdo->prepare('SELECT setting_value FROM site_settings WHERE setting_key = :setting_key LIMIT 1');
+        $stmt->execute(['setting_key' => $key]);
+        $value = $stmt->fetchColumn();
+    } catch (Throwable $e) {
+        $value = false;
+    }
+
+    $cache[$key] = $value !== false ? (string) $value : $default;
+    return $cache[$key];
+}
+
 function page_title(string $default = 'PatriotContracts'): string
 {
     if (!empty($GLOBALS['pageTitle']) && is_string($GLOBALS['pageTitle'])) {
@@ -436,7 +455,11 @@ function build_contract_search_filters(): array
 
 function contract_search_query_parts(array $filters): array
 {
-    $where = ['cc.is_duplicate = 0'];
+    $where = [
+        'cc.is_duplicate = 0',
+        'NOT EXISTS (SELECT 1 FROM listing_overrides loh WHERE loh.contract_id = cc.id AND loh.is_hidden = 1)',
+        'NOT EXISTS (SELECT 1 FROM grant_overrides goh WHERE goh.contract_id = cc.id AND goh.is_hidden = 1)',
+    ];
     $params = [];
 
     if (($filters['keyword'] ?? '') !== '') {
