@@ -42,7 +42,8 @@ if ($page > $totalPages) {
 
 $sql = 'SELECT cc.id,
     COALESCE(NULLIF(lo.display_title, ""), NULLIF(go.display_title, ""), cc.title) AS title,
-    COALESCE(NULLIF(lo.display_summary, ""), NULLIF(go.display_summary, ""), cc.description) AS description,
+    COALESCE(NULLIF(lo.display_summary, ""), NULLIF(go.display_summary, ""), NULLIF(cc.description_clean, ""), NULLIF(cc.description_raw, ""), cc.description) AS description,
+    cc.description_raw, cc.description_clean,
     cc.contract_number, cc.award_amount, cc.value_min, cc.value_max, cc.posted_date, cc.award_date,
     cc.response_deadline, cc.status, cc.naics_code, cc.psc_code, cc.contact_name, cc.contracting_office, cc.place_of_performance, cc.place_state,
     cc.set_aside_label, cc.notice_type, cc.is_biddable_now, cc.is_upcoming_signal, cc.is_awarded, cc.deadline_soon,
@@ -142,6 +143,7 @@ include __DIR__ . '/templates/header.php';
     <p>No contracts found.</p>
   <?php else: ?>
     <?php foreach ($rows as $row): ?>
+      <?php $listingDescription = contract_listing_description($row); ?>
       <article class="listing-item">
         <h3><a href="contract.php?id=<?php echo (int) $row['id']; ?>"><?php echo e(display_field_value('title', $row['title'] ?? null)); ?></a></h3>
         <p class="muted listing-meta"><?php echo e(display_field_value('agency', $row['agency_name'] ?? null)); ?> | <?php echo e(display_field_value('vendor', $row['vendor_name'] ?? null)); ?> | <?php echo e(display_field_value('category', $row['category_name'] ?? null)); ?></p>
@@ -153,7 +155,7 @@ include __DIR__ . '/templates/header.php';
           <?php if ((int) $row['deadline_soon'] === 1): ?>Deadline Soon | <?php endif; ?>
           <?php echo e(display_field_value('set_aside', $row['set_aside_label'] ?? null)); ?>
         </p>
-        <p class="listing-desc"><?php echo e(contract_listing_description($row)); ?></p>
+        <?php if ($listingDescription !== ''): ?><p class="listing-desc"><?php echo e($listingDescription); ?></p><?php endif; ?>
       </article>
       <hr>
     <?php endforeach; ?>

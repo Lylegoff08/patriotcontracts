@@ -5,7 +5,8 @@ $pageTitle = 'PatriotContracts | Federal Contract Listings';
 
 $latest = $pdo->query('SELECT cc.id,
     COALESCE(NULLIF(lo.display_title, ""), NULLIF(go.display_title, ""), cc.title) AS title,
-    COALESCE(NULLIF(lo.display_summary, ""), NULLIF(go.display_summary, ""), cc.description) AS description,
+    COALESCE(NULLIF(lo.display_summary, ""), NULLIF(go.display_summary, ""), NULLIF(cc.description_clean, ""), NULLIF(cc.description_raw, ""), cc.description) AS description,
+    cc.description_raw, cc.description_clean,
     cc.contract_number, cc.posted_date, cc.award_date, cc.response_deadline, cc.award_amount, cc.status, cc.naics_code, cc.psc_code, cc.contact_name, cc.contracting_office, cc.place_of_performance, cc.set_aside_label, cc.notice_type,
     a.name AS agency_name, v.name AS vendor_name, COALESCE(ocat.name, cat.name) AS category_name
     FROM contracts_clean cc
@@ -95,11 +96,12 @@ include __DIR__ . '/templates/header.php';
   <div class="card">
     <h2>Latest Contracts</h2>
     <?php foreach ($latest as $row): ?>
+      <?php $listingDescription = contract_listing_description($row); ?>
       <article class="listing-item">
         <a href="contract.php?id=<?php echo (int) $row['id']; ?>"><?php echo e(display_field_value('title', $row['title'] ?? null)); ?></a>
         <div class="muted listing-meta"><?php echo e(display_field_value('agency', $row['agency_name'] ?? null)); ?> | <?php echo e(display_field_value('vendor', $row['vendor_name'] ?? null)); ?> | <?php echo e(display_field_value('category', $row['category_name'] ?? null)); ?> | <?php echo e(display_contract_value($row, display_field_value('award_value', null))); ?></div>
         <div class="muted listing-meta">Posted: <?php echo e(display_field_value('posted_date', $row['posted_date'] ?? null)); ?> | Award: <?php echo e(display_field_value('award_date', $row['award_date'] ?? null)); ?> | Due: <?php echo e(display_field_value('response_deadline', $row['response_deadline'] ?? null)); ?> | Status: <?php echo e(display_field_value('status', $row['status'] ?? null)); ?></div>
-        <p class="listing-desc"><?php echo e(contract_listing_description($row)); ?></p>
+        <?php if ($listingDescription !== ''): ?><p class="listing-desc"><?php echo e($listingDescription); ?></p><?php endif; ?>
       </article>
     <?php endforeach; ?>
   </div>

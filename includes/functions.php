@@ -1,6 +1,7 @@
 ﻿<?php
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/description_normalizer.php';
 
 function e(string $value): string
 {
@@ -124,56 +125,31 @@ function page_title(string $default = 'PatriotContracts'): string
     return $default;
 }
 
+function contract_effective_description(array $row): string
+{
+    $candidates = [
+        $row['display_summary'] ?? null,
+        $row['description_clean'] ?? null,
+        $row['description_raw'] ?? null,
+        $row['description'] ?? null,
+    ];
+
+    foreach ($candidates as $candidate) {
+        $text = trim((string) $candidate);
+        if (!is_empty_display_value($text) && description_is_displayable_text($text)) {
+            return $text;
+        }
+    }
+
+    return '';
+}
+
 function contract_listing_description(array $row): string
 {
-    $parts = [];
-
-    $description = trim((string) ($row['description'] ?? ''));
-    if (!is_empty_display_value($description)) {
-        $parts[] = $description;
+    $summary = contract_effective_description($row);
+    if (is_empty_display_value($summary)) {
+        return '';
     }
-
-    $contractNumber = trim((string) ($row['contract_number'] ?? ''));
-    if (!is_empty_display_value($contractNumber)) {
-        $parts[] = 'Contract #: ' . $contractNumber;
-    }
-
-    $naics = trim((string) ($row['naics_code'] ?? ''));
-    if (!is_empty_display_value($naics)) {
-        $parts[] = 'NAICS: ' . $naics;
-    }
-
-    $psc = trim((string) ($row['psc_code'] ?? ''));
-    if (!is_empty_display_value($psc)) {
-        $parts[] = 'PSC: ' . $psc;
-    }
-
-    $contact = trim((string) ($row['contact_name'] ?? ''));
-    if (!is_empty_display_value($contact)) {
-        $parts[] = 'POC: ' . $contact;
-    }
-
-    $office = trim((string) ($row['contracting_office'] ?? ''));
-    if (!is_empty_display_value($office)) {
-        $parts[] = 'Office: ' . $office;
-    }
-
-    $pop = trim((string) ($row['place_of_performance'] ?? ''));
-    if (!is_empty_display_value($pop)) {
-        $parts[] = 'Place of Performance: ' . $pop;
-    }
-
-    $setAside = trim((string) ($row['set_aside_label'] ?? ''));
-    if (!is_empty_display_value($setAside)) {
-        $parts[] = 'Set-Aside: ' . $setAside;
-    }
-
-    $noticeType = trim((string) ($row['notice_type'] ?? ''));
-    if (!is_empty_display_value($noticeType)) {
-        $parts[] = 'Notice: ' . $noticeType;
-    }
-
-    $summary = implode(' | ', $parts);
     if (mb_strlen($summary) > 420) {
         return rtrim(mb_substr($summary, 0, 417)) . '...';
     }
@@ -184,6 +160,10 @@ function is_empty_display_value($value): bool
 {
     $text = strtolower(trim((string) $value));
     if ($text === '') {
+        return true;
+    }
+
+    if ($text === 'array' || str_starts_with($text, 'array(') || str_starts_with($text, 'array (')) {
         return true;
     }
 
@@ -463,7 +443,7 @@ function contract_search_query_parts(array $filters): array
     $params = [];
 
     if (($filters['keyword'] ?? '') !== '') {
-        $where[] = '(cc.title LIKE :kw OR cc.description LIKE :kw OR cc.contract_number LIKE :kw)';
+        $where[] = '(cc.title LIKE :kw OR COALESCE(NULLIF(cc.description_clean, ""), NULLIF(cc.description_raw, ""), cc.description) LIKE :kw OR cc.contract_number LIKE :kw)';
         $params['kw'] = '%' . $filters['keyword'] . '%';
     }
     if (($filters['category'] ?? '') !== '') {

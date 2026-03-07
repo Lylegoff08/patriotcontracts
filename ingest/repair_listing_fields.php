@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/normalize.php';
+require_once __DIR__ . '/../includes/description_normalizer.php';
 require_once __DIR__ . '/normalize_contracts.php';
 
 function db_field_is_empty($value): bool
@@ -15,10 +16,10 @@ function db_field_is_empty($value): bool
 
 function repair_listing_fields(PDO $pdo, bool $dryRun = true, int $limit = 2000): array
 {
-    $sql = "SELECT cc.id, cc.raw_id, cc.title, cc.contract_number, cc.notice_type, cc.posted_date, cc.response_deadline,
+    $sql = "SELECT cc.id, cc.raw_id, cc.source_type, cc.title, cc.contract_number, cc.notice_type, cc.posted_date, cc.response_deadline,
                    cc.set_aside_code, cc.set_aside_label, cc.naics_code, cc.psc_code, cc.place_of_performance, cc.place_state,
                    cc.contact_name, cc.contact_email, cc.contact_phone, cc.contracting_office, cc.contact_address,
-                   cc.description, cc.source_url, cc.agency_id, cc.vendor_id,
+                   cc.description, cc.description_raw, cc.description_clean, cc.summary_plain, cc.source_url, cc.agency_id, cc.vendor_id,
                    cr.payload_json, cr.source_url AS raw_source_url, cr.source_record_id
             FROM contracts_clean cc
             JOIN contracts_raw cr ON cr.id = cc.raw_id
@@ -60,6 +61,13 @@ function repair_listing_fields(PDO $pdo, bool $dryRun = true, int $limit = 2000)
             ['organizationName'], ['awardeeName'], ['Recipient Name'], ['legalBusinessName'], ['entityName'], ['applicantType'],
         ]));
 
+        $descriptionRaw = clean_nullable(payload_pick($payload, [['description'], ['synopsis'], ['summary'], ['awardDescription'], ['fullParentPathName']]));
+        $sourceType = strtolower(trim((string) ($row['source_type'] ?? '')));
+        $normalizedDescription = normalize_listing_description($sourceType, $descriptionRaw, [
+            'set_aside_label' => clean_nullable($setAside['set_aside_label'] ?? null),
+            'source_record_id' => $row['source_record_id'] ?? null,
+        ]);
+
         $candidate = [
             'title' => $title,
             'contract_number' => clean_nullable(payload_pick($payload, [['solicitationNumber'], ['opportunityNumber'], ['piid'], ['Award ID'], ['awardId'], ['referenceNumber']])),
@@ -77,7 +85,10 @@ function repair_listing_fields(PDO $pdo, bool $dryRun = true, int $limit = 2000)
             'contact_phone' => $contact['phone'],
             'contracting_office' => $contact['office'],
             'contact_address' => $contact['address'],
-            'description' => clean_nullable(payload_pick($payload, [['description'], ['synopsis'], ['summary'], ['awardDescription'], ['fullParentPathName']])),
+            'description' => $normalizedDescription['description_display'],
+            'description_raw' => $normalizedDescription['description_raw'],
+            'description_clean' => $normalizedDescription['description_clean'],
+            'summary_plain' => $normalizedDescription['summary_plain'],
             'source_url' => clean_nullable(pick_first_nonempty([$row['source_url'] ?? null, $row['raw_source_url'] ?? null, payload_pick($payload, [['uiLink'], ['url'], ['link'], ['opportunityUrl'], ['awardUrl']])])),
         ];
 

@@ -8,7 +8,8 @@ function recategorize_contracts(PDO $pdo, int $limit = 5000): array
 {
     $startedAt = date('Y-m-d H:i:s');
 
-    $sql = 'SELECT cc.id, cc.title, cc.description, cc.naics_code, cc.psc_code, cc.notice_type, cc.status, cc.source_type,
+    $sql = 'SELECT cc.id, cc.title, COALESCE(NULLIF(cc.description_clean, ""), NULLIF(cc.description_raw, ""), cc.description) AS description,
+                   cc.naics_code, cc.psc_code, cc.notice_type, cc.status, cc.source_type,
                    cc.response_deadline, cc.contact_name, cc.contact_email, cc.contact_phone, cc.contracting_office,
                    cc.award_amount, cc.value_min, cc.value_max, a.name AS agency_name
             FROM contracts_clean cc

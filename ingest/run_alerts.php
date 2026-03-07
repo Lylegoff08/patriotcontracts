@@ -16,7 +16,7 @@ function run_alerts(PDO $pdo): array
         $params = [];
 
         if (!empty($query['keyword'])) {
-            $sql .= ' AND (title LIKE :kw OR description LIKE :kw)';
+            $sql .= ' AND (title LIKE :kw OR COALESCE(NULLIF(description_clean, ""), NULLIF(description_raw, ""), description) LIKE :kw)';
             $params['kw'] = '%' . $query['keyword'] . '%';
         }
 

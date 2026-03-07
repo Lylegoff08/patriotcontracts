@@ -1,6 +1,6 @@
 ﻿-- PatriotContracts consolidated installer
 -- Generated from schema + migrations
--- Order: schema -> actionability -> membership_auth -> search_ingest_hardening
+-- Order: schema -> actionability -> membership_auth -> search_ingest_hardening -> description_normalization
 -- Idempotency relies on IF NOT EXISTS / ON DUPLICATE KEY UPDATE patterns in source files.
 
 USE patriotcontracts;
@@ -877,3 +877,14 @@ ALTER TABLE contracts_raw
 
 -- ===== END sql/migration_2026_03_search_ingest_hardening.sql =====
 
+-- ===== BEGIN sql/migration_2026_03_description_normalization.sql =====
+
+USE patriotcontracts;
+
+ALTER TABLE contracts_clean
+  MODIFY COLUMN description MEDIUMTEXT NULL,
+  ADD COLUMN IF NOT EXISTS description_raw MEDIUMTEXT NULL AFTER description,
+  ADD COLUMN IF NOT EXISTS description_clean MEDIUMTEXT NULL AFTER description_raw,
+  ADD COLUMN IF NOT EXISTS summary_plain TEXT NULL AFTER description_clean;
+
+-- ===== END sql/migration_2026_03_description_normalization.sql =====
