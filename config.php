@@ -34,6 +34,11 @@ return [
         'page_size' => 100,
         'max_pages_per_run' => 25,
         'days_back' => 120,
+        // Prevent inherited process proxy vars from hijacking SAM calls in local/dev.
+        'sam_http' => [
+            'disable_proxy' => true,
+            'proxy_url' => '',
+        ],
         'ssl' => [
             'verify_ssl' => false,
             'ca_bundle' => 'C:\\xampp\\apache\\bin\\curl-ca-bundle.crt',

@@ -20,6 +20,7 @@ return [
         ],
         'sam_opportunities' => [
             'base_url' => 'https://api.sam.gov/prod/opportunities/v2/search',
+            'noticedesc_base_url' => 'https://api.sam.gov/prod/opportunities/v1/noticedesc',
             'api_key' => '',
         ],
         'sam_awards' => [
@@ -34,6 +35,11 @@ return [
         'page_size' => 100,
         'max_pages_per_run' => 25,
         'days_back' => 120,
+        // SAM transport proxy defaults: proxy is disabled unless explicitly enabled/configured.
+        'sam_http' => [
+            'disable_proxy' => true,
+            'proxy_url' => '',
+        ],
         'ssl' => [
             'verify_ssl' => true,
             'ca_bundle' => 'C:\\xampp\\apache\\bin\\curl-ca-bundle.crt',

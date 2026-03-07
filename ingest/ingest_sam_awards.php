@@ -43,12 +43,13 @@ function ingest_sam_awards(PDO $pdo, array $config): array
     ];
 
     $baseUrl = rtrim($config['sources']['sam_awards']['base_url'], '?');
+    $samProxy = ingest_sam_proxy_options($config);
     $response = null;
     $lastErr = null;
     foreach ($queryCandidates as $query) {
         try {
             $url = $baseUrl . '?' . http_build_query($query);
-            $candidate = http_get_json($url);
+            $candidate = http_get_json($url, [], 30, (array) ($samProxy['curl_options'] ?? []));
             if ((int) $candidate['status'] >= 200 && (int) $candidate['status'] < 300) {
                 $response = $candidate;
                 break;
